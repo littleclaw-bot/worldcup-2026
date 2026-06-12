@@ -1,10 +1,12 @@
 # worldcup-2026 — 世足預測模型
 
+**🌐 Live: <https://wc2026-predict.streamlit.app/>**
+
 2026 世界盃（美加墨，48 隊新賽制）的 Dixon-Coles 預測模型 + 賽程 Monte Carlo 模擬 + 對賭市場校準追蹤。純紙上驗證，不真下注。
 
 ## 架構
 
-```
+```text
 data/
   results.csv      # martj42/international_results：1872 至今所有國際賽 +
                    # 2026 世足 72 場小組賽（未踢=NA，上游持續更新比分）
