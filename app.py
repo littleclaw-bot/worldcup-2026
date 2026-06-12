@@ -90,12 +90,18 @@ ISO2 = {
 
 
 def flag_url(t: str) -> str | None:
-    """flagcdn 國旗小圖（Windows 不渲染旗子 emoji，用真圖）.
+    """國旗小圖（Windows 不渲染旗子 emoji，用真圖）.
 
-    用固定高度 h24：各國旗長寬比不同（瑞士正方形、卡達狹長），
-    固定寬度會高矮不一。
+    用 flag-icons 的統一 4:3 版本：各國旗原始長寬比不一
+    （瑞士正方形、卡達 28:11），st.ImageColumn 又會按欄寬縮放，
+    原比例圖檔在表格裡大小必亂；4:3 統一規格每面旗完全等大。
     """
-    return f"https://flagcdn.com/h24/{ISO2[t]}.png" if t in ISO2 else None
+    if t not in ISO2:
+        return None
+    return (
+        "https://cdn.jsdelivr.net/gh/lipis/flag-icons@7.2.3"
+        f"/flags/4x3/{ISO2[t]}.svg"
+    )
 
 
 def localize(s: str) -> str:
