@@ -6,6 +6,7 @@ Team names follow martj42/international_results conventions
 from __future__ import annotations
 
 import io
+import re
 from pathlib import Path
 from urllib.request import urlopen
 
@@ -81,6 +82,55 @@ SF = [
 ]
 FINAL = [(104, "W101", "W102", "United States")]
 KNOCKOUT_ROUNDS = [("R32", R32), ("R16", R16), ("QF", QF), ("SF", SF), ("F", FINAL)]
+
+
+_NAME_FIX = {"USA": "United States", "Bosnia & Herzegovina": "Bosnia and Herzegovina"}
+_MONTHS = {"Jun": 6, "June": 6, "Jul": 7, "July": 7}
+_DATE_RE = re.compile(
+    r"^(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s+(June?|July?)\s+(\d{1,2})\b"
+)
+_GROUP_TIME_RE = re.compile(r"^\s*(\d{1,2}):(\d{2})\s+UTC([+-]\d+)\s+(.*?)\s+@")
+_KO_TIME_RE = re.compile(r"^\s*\((\d+)\)\s+(\d{1,2}):(\d{2})\s+UTC([+-]\d+)")
+_VS_SPLIT_RE = re.compile(r"\s+(?:v|\d+-\d+(?:\s*\(\d+-\d+\))?)\s+")
+
+
+def kickoff_times() -> tuple[dict[tuple[str, str], pd.Timestamp], dict[int, pd.Timestamp]]:
+    """Parse cup.txt / cup_finals.txt kickoff times -> Taiwan time (UTC+8).
+
+    Returns ({(home, away): tw_ts} for group stage, {match_no: tw_ts} for KO).
+    """
+    def to_tw(month: int, day: int, hh: int, mm: int, offset: int) -> pd.Timestamp:
+        local = pd.Timestamp(2026, month, day, hh, mm)
+        return local + pd.Timedelta(hours=8 - offset)
+
+    group_map: dict[tuple[str, str], pd.Timestamp] = {}
+    month = day = None
+    for line in (DATA_DIR / "cup.txt").read_text(encoding="utf-8").splitlines():
+        if m := _DATE_RE.match(line.strip()):
+            month, day = _MONTHS[m.group(1)], int(m.group(2))
+            continue
+        if month is None or not (m := _GROUP_TIME_RE.match(line)):
+            continue
+        teams = _VS_SPLIT_RE.split(m.group(4).strip())
+        if len(teams) != 2:
+            continue
+        home, away = (_NAME_FIX.get(t.strip(), t.strip()) for t in teams)
+        group_map[(home, away)] = to_tw(
+            month, day, int(m.group(1)), int(m.group(2)), int(m.group(3))
+        )
+
+    ko_map: dict[int, pd.Timestamp] = {}
+    month = day = None
+    for line in (DATA_DIR / "cup_finals.txt").read_text(encoding="utf-8").splitlines():
+        if m := _DATE_RE.match(line.strip()):
+            month, day = _MONTHS[m.group(1)], int(m.group(2))
+            continue
+        if month is None or not (m := _KO_TIME_RE.match(line)):
+            continue
+        ko_map[int(m.group(1))] = to_tw(
+            month, day, int(m.group(2)), int(m.group(3)), int(m.group(4))
+        )
+    return group_map, ko_map
 
 
 def refresh_results() -> None:

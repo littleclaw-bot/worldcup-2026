@@ -300,52 +300,74 @@ def slot_zh(s: str) -> str:
     return f"{s[1]}組第{s[0]}名"
 
 
+WEEK_ZH = "一二三四五六日"
+
+
+def _tw_fmt(ts) -> str:
+    if ts is None:
+        return "—"
+    return f"{ts:%m-%d %H:%M}（{WEEK_ZH[ts.dayofweek]}）"
+
+
 with tab_sched:
     team_filter = st.selectbox(
         "篩選隊伍", ["全部"] + [tname(t) for t in data.ALL_TEAMS]
     )
     only_pending = st.checkbox("只看未踢", value=False)
 
+    g_times, ko_times = data.kickoff_times()
     rows = []
     for r in fixtures.itertuples():
         score = (
             f"{int(r.home_score)} : {int(r.away_score)}"
             if pd.notna(r.home_score) else "—"
         )
+        tw = (g_times.get((r.home_team, r.away_team))
+              or g_times.get((r.away_team, r.home_team)))
         rows.append({
-            "日期": str(r.date.date()), "輪次": f"小組 {r.group}",
+            "當地日期": str(r.date.date()), "台灣時間": _tw_fmt(tw),
+            "輪次": f"小組 {r.group}",
             "主旗": flag_url(r.home_team), "主隊": tname(r.home_team),
             "比分": score,
             "客旗": flag_url(r.away_team), "客隊": tname(r.away_team),
             "城市": CITY_ZH.get(r.city, r.city),
-            "_teams": {r.home_team, r.away_team}, "_pending": pd.isna(r.home_score),
+            "_teams": {r.home_team, r.away_team},
+            "_pending": pd.isna(r.home_score),
+            "_sort": tw if tw is not None else pd.Timestamp(r.date),
         })
     for no, md, hs, as_, city, rnd in KO_SCHEDULE:
+        tw = ko_times.get(no)
         rows.append({
-            "日期": f"2026-{md}", "輪次": f"{rnd}（{no}）",
+            "當地日期": f"2026-{md}", "台灣時間": _tw_fmt(tw),
+            "輪次": f"{rnd}（{no}）",
             "主旗": None, "主隊": slot_zh(hs), "比分": "—",
             "客旗": None, "客隊": slot_zh(as_),
             "城市": city, "_teams": set(), "_pending": True,
+            "_sort": tw if tw is not None else pd.Timestamp(f"2026-{md}"),
         })
 
-    sched = pd.DataFrame(rows).sort_values("日期")
+    sched = pd.DataFrame(rows).sort_values("_sort")
     if team_filter != "全部":
         eng = data.ALL_TEAMS[[tname(t) for t in data.ALL_TEAMS].index(team_filter)]
         sched = sched[sched["_teams"].map(lambda s: eng in s)]
     if only_pending:
         sched = sched[sched["_pending"]]
-    today = str(pd.Timestamp.now().date())
-    st.caption(f"共 {len(sched)} 場（今天 {today}）。淘汰賽對戰隊伍待小組賽底定。")
+    today_md = f"{pd.Timestamp.now():%m-%d}"
+    st.caption(
+        f"共 {len(sched)} 場（台灣今天 {today_md}）。"
+        "台灣時間=開球時刻；淘汰賽對戰隊伍待小組賽底定。"
+    )
 
     def _hl_today(row):
-        # 半透明黃：dark/light 模式下文字都保持可讀
+        # 半透明黃：dark/light 模式下文字都保持可讀；以台灣日期判定今天
         style = (
             "background-color: rgba(250, 204, 21, 0.22)"
-            if row["日期"] == today else ""
+            if row["台灣時間"].startswith(today_md) else ""
         )
         return [style] * len(row)
 
-    show_cols = ["日期", "輪次", "主旗", "主隊", "比分", "客旗", "客隊", "城市"]
+    show_cols = ["台灣時間", "當地日期", "輪次", "主旗", "主隊", "比分",
+                 "客旗", "客隊", "城市"]
     st.dataframe(
         sched[show_cols].style.apply(_hl_today, axis=1),
         hide_index=True, width="stretch", height=700,
