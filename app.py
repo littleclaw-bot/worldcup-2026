@@ -68,8 +68,12 @@ ISO2 = {
 
 
 def flag_url(t: str) -> str | None:
-    """flagcdn 國旗小圖（Windows 不渲染旗子 emoji，用真圖）."""
-    return f"https://flagcdn.com/w40/{ISO2[t]}.png" if t in ISO2 else None
+    """flagcdn 國旗小圖（Windows 不渲染旗子 emoji，用真圖）.
+
+    用固定高度 h24：各國旗長寬比不同（瑞士正方形、卡達狹長），
+    固定寬度會高矮不一。
+    """
+    return f"https://flagcdn.com/h24/{ISO2[t]}.png" if t in ISO2 else None
 
 
 def localize(s: str) -> str:
