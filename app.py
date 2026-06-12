@@ -94,7 +94,18 @@ def get_sim(mtimes: tuple, n_sims: int) -> pd.DataFrame:
 
 # ---------------- sidebar ----------------
 st.sidebar.title("⚽ WC2026 預測")
-if st.sidebar.button("🔄 抓最新比分（重新下載）"):
+
+STALE_HOURS = 6
+_age_h = (pd.Timestamp.now().timestamp() - data.RESULTS_CSV.stat().st_mtime) / 3600
+if _age_h > STALE_HOURS:
+    try:
+        with st.spinner(f"資料已 {_age_h:.0f} 小時未更新，自動抓最新比分 ..."):
+            data.refresh_results()
+        st.toast("✅ 已自動更新比分資料")
+    except Exception as e:
+        st.sidebar.warning(f"自動更新失敗（{e}），先用本地資料")
+
+if st.sidebar.button("🔄 立刻抓最新比分"):
     with st.spinner("下載 results.csv ..."):
         data.refresh_results()
     st.cache_resource.clear()
@@ -108,10 +119,15 @@ model, results_df, n_train = get_model(mt)
 fixtures = data.wc_fixtures(results_df)
 odds = oddsmod.load_odds()
 
+_fetched = (
+    pd.Timestamp(data.RESULTS_CSV.stat().st_mtime, unit="s", tz="UTC")
+    .tz_convert("Asia/Taipei")
+)
 st.sidebar.caption(
     f"訓練 {n_train} 場（2018–今）\n\n"
     f"home_adv={model.home_adv:.3f}, rho={model.rho:.4f}\n\n"
-    f"資料最後日期：{results_df['date'].max().date()}"
+    f"資料最後日期：{results_df['date'].max().date()}\n\n"
+    f"資料抓取時間：{_fetched:%Y-%m-%d %H:%M}（台灣）"
 )
 
 played = fixtures[fixtures["home_score"].notna()]
@@ -287,7 +303,11 @@ with tab_sched:
     st.caption(f"共 {len(sched)} 場（今天 {today}）。淘汰賽對戰隊伍待小組賽底定。")
 
     def _hl_today(row):
-        style = "background-color: #fef9c3" if row["日期"] == today else ""
+        # 半透明黃：dark/light 模式下文字都保持可讀
+        style = (
+            "background-color: rgba(250, 204, 21, 0.22)"
+            if row["日期"] == today else ""
+        )
         return [style] * len(row)
 
     show_cols = ["日期", "輪次", "主隊", "比分", "客隊", "城市"]
