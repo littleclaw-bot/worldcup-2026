@@ -20,22 +20,6 @@ from wc import data, model as dcmodel, odds as oddsmod, simulate
 
 st.set_page_config(page_title="WC2026 預測", page_icon="⚽", layout="wide")
 
-FLAGS = {
-    "Mexico": "🇲🇽", "South Africa": "🇿🇦", "South Korea": "🇰🇷", "Czech Republic": "🇨🇿",
-    "Canada": "🇨🇦", "Bosnia and Herzegovina": "🇧🇦", "Qatar": "🇶🇦", "Switzerland": "🇨🇭",
-    "Brazil": "🇧🇷", "Morocco": "🇲🇦", "Haiti": "🇭🇹", "Scotland": "🏴󠁧󠁢󠁳󠁣󠁴󠁿",
-    "United States": "🇺🇸", "Paraguay": "🇵🇾", "Australia": "🇦🇺", "Turkey": "🇹🇷",
-    "Germany": "🇩🇪", "Curaçao": "🇨🇼", "Ivory Coast": "🇨🇮", "Ecuador": "🇪🇨",
-    "Netherlands": "🇳🇱", "Japan": "🇯🇵", "Sweden": "🇸🇪", "Tunisia": "🇹🇳",
-    "Belgium": "🇧🇪", "Egypt": "🇪🇬", "Iran": "🇮🇷", "New Zealand": "🇳🇿",
-    "Spain": "🇪🇸", "Cape Verde": "🇨🇻", "Saudi Arabia": "🇸🇦", "Uruguay": "🇺🇾",
-    "France": "🇫🇷", "Senegal": "🇸🇳", "Iraq": "🇮🇶", "Norway": "🇳🇴",
-    "Argentina": "🇦🇷", "Algeria": "🇩🇿", "Austria": "🇦🇹", "Jordan": "🇯🇴",
-    "Portugal": "🇵🇹", "DR Congo": "🇨🇩", "Uzbekistan": "🇺🇿", "Colombia": "🇨🇴",
-    "England": "🏴󠁧󠁢󠁥󠁮󠁧󠁿", "Croatia": "🇭🇷", "Ghana": "🇬🇭", "Panama": "🇵🇦",
-}
-
-
 ZH = {
     "Mexico": "墨西哥", "South Africa": "南非", "South Korea": "南韓",
     "Czech Republic": "捷克", "Canada": "加拿大",
@@ -57,13 +41,35 @@ ZH = {
 
 
 def tname(t: str) -> str:
-    """旗 + 中文 + 英文，給表格/標題用."""
-    return f"{FLAGS.get(t, '')} {ZH.get(t, t)} {t}"
+    """中文 + 英文，給表格/標題用（旗子 emoji Windows 不渲染，改用圖檔欄）."""
+    return f"{ZH.get(t, t)} {t}"
 
 
 def zh(t: str) -> str:
-    """旗 + 中文，給空間小的地方用."""
-    return f"{FLAGS.get(t, '')} {ZH.get(t, t)}"
+    """中文短名，給空間小的地方用."""
+    return ZH.get(t, t)
+
+
+ISO2 = {
+    "Mexico": "mx", "South Africa": "za", "South Korea": "kr",
+    "Czech Republic": "cz", "Canada": "ca", "Bosnia and Herzegovina": "ba",
+    "Qatar": "qa", "Switzerland": "ch", "Brazil": "br", "Morocco": "ma",
+    "Haiti": "ht", "Scotland": "gb-sct", "United States": "us",
+    "Paraguay": "py", "Australia": "au", "Turkey": "tr", "Germany": "de",
+    "Curaçao": "cw", "Ivory Coast": "ci", "Ecuador": "ec",
+    "Netherlands": "nl", "Japan": "jp", "Sweden": "se", "Tunisia": "tn",
+    "Belgium": "be", "Egypt": "eg", "Iran": "ir", "New Zealand": "nz",
+    "Spain": "es", "Cape Verde": "cv", "Saudi Arabia": "sa", "Uruguay": "uy",
+    "France": "fr", "Senegal": "sn", "Iraq": "iq", "Norway": "no",
+    "Argentina": "ar", "Algeria": "dz", "Austria": "at", "Jordan": "jo",
+    "Portugal": "pt", "DR Congo": "cd", "Uzbekistan": "uz", "Colombia": "co",
+    "England": "gb-eng", "Croatia": "hr", "Ghana": "gh", "Panama": "pa",
+}
+
+
+def flag_url(t: str) -> str | None:
+    """flagcdn 國旗小圖（Windows 不渲染旗子 emoji，用真圖）."""
+    return f"https://flagcdn.com/w40/{ISO2[t]}.png" if t in ISO2 else None
 
 
 def localize(s: str) -> str:
@@ -282,14 +288,17 @@ with tab_sched:
         )
         rows.append({
             "日期": str(r.date.date()), "輪次": f"小組 {r.group}",
-            "主隊": zh(r.home_team), "比分": score, "客隊": zh(r.away_team),
+            "主旗": flag_url(r.home_team), "主隊": ZH[r.home_team],
+            "比分": score,
+            "客旗": flag_url(r.away_team), "客隊": ZH[r.away_team],
             "城市": CITY_ZH.get(r.city, r.city),
             "_teams": {r.home_team, r.away_team}, "_pending": pd.isna(r.home_score),
         })
     for no, md, hs, as_, city, rnd in KO_SCHEDULE:
         rows.append({
             "日期": f"2026-{md}", "輪次": f"{rnd}（{no}）",
-            "主隊": slot_zh(hs), "比分": "—", "客隊": slot_zh(as_),
+            "主旗": None, "主隊": slot_zh(hs), "比分": "—",
+            "客旗": None, "客隊": slot_zh(as_),
             "城市": city, "_teams": set(), "_pending": True,
         })
 
@@ -310,10 +319,14 @@ with tab_sched:
         )
         return [style] * len(row)
 
-    show_cols = ["日期", "輪次", "主隊", "比分", "客隊", "城市"]
+    show_cols = ["日期", "輪次", "主旗", "主隊", "比分", "客旗", "客隊", "城市"]
     st.dataframe(
         sched[show_cols].style.apply(_hl_today, axis=1),
         hide_index=True, width="stretch", height=700,
+        column_config={
+            "主旗": st.column_config.ImageColumn("", width=36),
+            "客旗": st.column_config.ImageColumn("", width=36),
+        },
     )
 
 # ---------------- 冠軍機率 ----------------
@@ -337,6 +350,7 @@ with tab_title:
 
     st.subheader("各輪晉級機率")
     full = tab.copy()
+    full.insert(0, "旗", full["team"].map(flag_url))
     full["team"] = full["team"].map(tname)
     full = full.rename(columns={
         "team": "隊伍", "group": "組", "R32": "32強", "R16": "16強",
@@ -349,6 +363,7 @@ with tab_title:
             subset=["32強", "16強", "8強", "4強", "決賽", "冠軍"], cmap="Greens"
         ),
         hide_index=True, width="stretch", height=600,
+        column_config={"旗": st.column_config.ImageColumn("", width=36)},
     )
 
 # ---------------- 分組形勢 ----------------
@@ -380,7 +395,8 @@ with tab_groups:
         df_g = pd.DataFrame(
             rows, columns=["隊伍", "賽", "積分", "球差", "進球", "晉級32強"]
         )
-        df_g["隊伍"] = df_g["隊伍"].map(tname)
+        df_g.insert(0, "旗", df_g["隊伍"].map(flag_url))
+        df_g["隊伍"] = df_g["隊伍"].map(zh)
         with cols[i % 2]:
             st.markdown(f"#### {g} 組")
             st.dataframe(
@@ -388,6 +404,7 @@ with tab_groups:
                     subset=["晉級32強"], cmap="Greens", vmin=0, vmax=1
                 ),
                 hide_index=True, width="stretch",
+                column_config={"旗": st.column_config.ImageColumn("", width=36)},
             )
 
 # ---------------- 模型 vs 市場 ----------------
