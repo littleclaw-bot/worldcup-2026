@@ -117,8 +117,9 @@ st.sidebar.caption(
 played = fixtures[fixtures["home_score"].notna()]
 pending = fixtures[fixtures["home_score"].isna()]
 
-tab_match, tab_title, tab_groups, tab_market, tab_drill = st.tabs(
-    ["📅 賽事預測", "🏆 冠軍機率", "📋 分組形勢", "📊 模型 vs 市場", "🔍 單場下鑽"]
+tab_match, tab_sched, tab_title, tab_groups, tab_market, tab_drill = st.tabs(
+    ["📅 賽事預測", "🗓️ 賽程表", "🏆 冠軍機率", "📋 分組形勢",
+     "📊 模型 vs 市場", "🔍 單場下鑽"]
 )
 
 # ---------------- 賽事預測 ----------------
@@ -192,6 +193,108 @@ with tab_match:
                 "模型給對的機率": f"{p[out]:.0%}",
             })
         st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch")
+
+# ---------------- 賽程表 ----------------
+# 淘汰賽：(場次, 日期, 主slot, 客slot, 城市, 輪次)
+KO_SCHEDULE = [
+    (73, "06-28", "2A", "2B", "洛杉磯", "32強"),
+    (74, "06-29", "1E", "3:ABCDF", "波士頓", "32強"),
+    (75, "06-29", "1F", "2C", "蒙特雷 🇲🇽", "32強"),
+    (76, "06-29", "1C", "2F", "休士頓", "32強"),
+    (77, "06-30", "1I", "3:CDFGH", "紐約/紐澤西", "32強"),
+    (78, "06-30", "2E", "2I", "達拉斯", "32強"),
+    (79, "06-30", "1A", "3:CEFHI", "墨西哥城 🇲🇽", "32強"),
+    (80, "07-01", "1L", "3:EHIJK", "亞特蘭大", "32強"),
+    (81, "07-01", "1D", "3:BEFIJ", "舊金山灣區", "32強"),
+    (82, "07-01", "1G", "3:AEHIJ", "西雅圖", "32強"),
+    (83, "07-02", "2K", "2L", "多倫多 🇨🇦", "32強"),
+    (84, "07-02", "1H", "2J", "洛杉磯", "32強"),
+    (85, "07-02", "1B", "3:EFGIJ", "溫哥華 🇨🇦", "32強"),
+    (86, "07-03", "1J", "2H", "邁阿密", "32強"),
+    (87, "07-03", "1K", "3:DEIJL", "堪薩斯城", "32強"),
+    (88, "07-03", "2D", "2G", "達拉斯", "32強"),
+    (89, "07-04", "W74", "W77", "費城", "16強"),
+    (90, "07-04", "W73", "W75", "休士頓", "16強"),
+    (91, "07-05", "W76", "W78", "紐約/紐澤西", "16強"),
+    (92, "07-05", "W79", "W80", "墨西哥城 🇲🇽", "16強"),
+    (93, "07-06", "W83", "W84", "達拉斯", "16強"),
+    (94, "07-06", "W81", "W82", "西雅圖", "16強"),
+    (95, "07-07", "W86", "W88", "亞特蘭大", "16強"),
+    (96, "07-07", "W85", "W87", "溫哥華 🇨🇦", "16強"),
+    (97, "07-09", "W89", "W90", "波士頓", "8強"),
+    (98, "07-10", "W93", "W94", "洛杉磯", "8強"),
+    (99, "07-11", "W91", "W92", "邁阿密", "8強"),
+    (100, "07-11", "W95", "W96", "堪薩斯城", "8強"),
+    (101, "07-14", "W97", "W98", "達拉斯", "4強"),
+    (102, "07-15", "W99", "W100", "亞特蘭大", "4強"),
+    (103, "07-18", "L101", "L102", "邁阿密", "季軍戰"),
+    (104, "07-19", "W101", "W102", "紐約/紐澤西", "決賽"),
+]
+
+CITY_ZH = {
+    "Mexico City": "墨西哥城 🇲🇽", "Zapopan": "瓜達拉哈拉 🇲🇽",
+    "Guadalupe": "蒙特雷 🇲🇽", "Atlanta": "亞特蘭大", "Foxborough": "波士頓",
+    "Arlington": "達拉斯", "Houston": "休士頓", "Kansas City": "堪薩斯城",
+    "Inglewood": "洛杉磯", "Miami Gardens": "邁阿密",
+    "East Rutherford": "紐約/紐澤西", "Philadelphia": "費城",
+    "Santa Clara": "舊金山灣區", "Seattle": "西雅圖",
+    "Toronto": "多倫多 🇨🇦", "Vancouver": "溫哥華 🇨🇦",
+}
+
+
+def slot_zh(s: str) -> str:
+    if s.startswith("W"):
+        return f"第{s[1:]}場勝者"
+    if s.startswith("L"):
+        return f"第{s[1:]}場敗者"
+    if s.startswith("3:"):
+        return f"最佳第三（{'/'.join(s[2:])} 組）"
+    return f"{s[1]}組第{s[0]}名"
+
+
+with tab_sched:
+    team_filter = st.selectbox(
+        "篩選隊伍", ["全部"] + [tname(t) for t in data.ALL_TEAMS]
+    )
+    only_pending = st.checkbox("只看未踢", value=False)
+
+    rows = []
+    for r in fixtures.itertuples():
+        score = (
+            f"{int(r.home_score)} : {int(r.away_score)}"
+            if pd.notna(r.home_score) else "—"
+        )
+        rows.append({
+            "日期": str(r.date.date()), "輪次": f"小組 {r.group}",
+            "主隊": zh(r.home_team), "比分": score, "客隊": zh(r.away_team),
+            "城市": CITY_ZH.get(r.city, r.city),
+            "_teams": {r.home_team, r.away_team}, "_pending": pd.isna(r.home_score),
+        })
+    for no, md, hs, as_, city, rnd in KO_SCHEDULE:
+        rows.append({
+            "日期": f"2026-{md}", "輪次": f"{rnd}（{no}）",
+            "主隊": slot_zh(hs), "比分": "—", "客隊": slot_zh(as_),
+            "城市": city, "_teams": set(), "_pending": True,
+        })
+
+    sched = pd.DataFrame(rows).sort_values("日期")
+    if team_filter != "全部":
+        eng = data.ALL_TEAMS[[tname(t) for t in data.ALL_TEAMS].index(team_filter)]
+        sched = sched[sched["_teams"].map(lambda s: eng in s)]
+    if only_pending:
+        sched = sched[sched["_pending"]]
+    today = str(pd.Timestamp.now().date())
+    st.caption(f"共 {len(sched)} 場（今天 {today}）。淘汰賽對戰隊伍待小組賽底定。")
+
+    def _hl_today(row):
+        style = "background-color: #fef9c3" if row["日期"] == today else ""
+        return [style] * len(row)
+
+    show_cols = ["日期", "輪次", "主隊", "比分", "客隊", "城市"]
+    st.dataframe(
+        sched[show_cols].style.apply(_hl_today, axis=1),
+        hide_index=True, width="stretch", height=700,
+    )
 
 # ---------------- 冠軍機率 ----------------
 with tab_title:
