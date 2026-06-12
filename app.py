@@ -127,7 +127,7 @@ st.sidebar.caption(
     f"訓練 {n_train} 場（2018–今）\n\n"
     f"home_adv={model.home_adv:.3f}, rho={model.rho:.4f}\n\n"
     f"資料最後日期：{results_df['date'].max().date()}\n\n"
-    f"資料抓取時間：{_fetched:%Y-%m-%d %H:%M}（台灣）"
+    f"資料抓取時間：{_fetched:%Y-%m-%d %H:%M}"
 )
 
 played = fixtures[fixtures["home_score"].notna()]
