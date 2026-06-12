@@ -140,6 +140,22 @@ def refresh_results() -> None:
     RESULTS_CSV.write_bytes(raw)
 
 
+_OPENFOOTBALL_BASE = (
+    "https://raw.githubusercontent.com/openfootball/worldcup/master/2026--usa/"
+)
+
+
+def ensure_data() -> None:
+    """Download any missing data file (cloud deploys start with no data/)."""
+    DATA_DIR.mkdir(exist_ok=True)
+    if not RESULTS_CSV.exists():
+        refresh_results()
+    for fn in ("cup.txt", "cup_finals.txt"):
+        path = DATA_DIR / fn
+        if not path.exists():
+            path.write_bytes(urlopen(_OPENFOOTBALL_BASE + fn, timeout=60).read())
+
+
 def load_results() -> pd.DataFrame:
     df = pd.read_csv(RESULTS_CSV, parse_dates=["date"])
     df["home_score"] = pd.to_numeric(df["home_score"], errors="coerce")

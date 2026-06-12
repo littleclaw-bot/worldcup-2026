@@ -127,6 +127,8 @@ def get_sim(mtimes: tuple, n_sims: int) -> pd.DataFrame:
 # ---------------- sidebar ----------------
 st.sidebar.title("⚽ WC2026 預測")
 
+data.ensure_data()  # 雲端首次啟動沒有 data/，自動補齊
+
 STALE_HOURS = 6
 _age_h = (pd.Timestamp.now().timestamp() - data.RESULTS_CSV.stat().st_mtime) / 3600
 if _age_h > STALE_HOURS:
