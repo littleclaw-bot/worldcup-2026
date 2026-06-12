@@ -40,7 +40,7 @@ out/               # 輸出（match_predictions.csv / tournament_probs.csv / sco
 
 ```bash
 # 每天跑一次（results.csv 上游會更新比分）
-C:/ProgramData/anaconda3/envs/python310/python.exe run_predict.py --refresh
+python run_predict.py --refresh
 ```
 
 輸出：近 3 天賽事勝平負機率、model vs market edge（≥5%）、

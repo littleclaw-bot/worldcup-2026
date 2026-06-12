@@ -1,7 +1,7 @@
 """WC2026 預測儀表板.
 
 啟動：
-    C:/ProgramData/anaconda3/envs/python310/python.exe -m streamlit run app.py
+    streamlit run app.py
 """
 from __future__ import annotations
 
