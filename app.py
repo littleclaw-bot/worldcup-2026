@@ -40,9 +40,31 @@ ZH = {
 }
 
 
+# FIFA 官方三碼（電視轉播用的縮寫）
+FIFA = {
+    "Mexico": "MEX", "South Africa": "RSA", "South Korea": "KOR",
+    "Czech Republic": "CZE", "Canada": "CAN",
+    "Bosnia and Herzegovina": "BIH", "Qatar": "QAT", "Switzerland": "SUI",
+    "Brazil": "BRA", "Morocco": "MAR", "Haiti": "HAI", "Scotland": "SCO",
+    "United States": "USA", "Paraguay": "PAR", "Australia": "AUS",
+    "Turkey": "TUR", "Germany": "GER", "Curaçao": "CUW",
+    "Ivory Coast": "CIV", "Ecuador": "ECU", "Netherlands": "NED",
+    "Japan": "JPN", "Sweden": "SWE", "Tunisia": "TUN", "Belgium": "BEL",
+    "Egypt": "EGY", "Iran": "IRN", "New Zealand": "NZL", "Spain": "ESP",
+    "Cape Verde": "CPV", "Saudi Arabia": "KSA", "Uruguay": "URU",
+    "France": "FRA", "Senegal": "SEN", "Iraq": "IRQ", "Norway": "NOR",
+    "Argentina": "ARG", "Algeria": "ALG", "Austria": "AUT", "Jordan": "JOR",
+    "Portugal": "POR", "DR Congo": "COD", "Uzbekistan": "UZB",
+    "Colombia": "COL", "England": "ENG", "Croatia": "CRO", "Ghana": "GHA",
+    "Panama": "PAN",
+}
+
+
 def tname(t: str) -> str:
-    """中文 + 英文，給表格/標題用（旗子 emoji Windows 不渲染，改用圖檔欄）."""
-    return f"{ZH.get(t, t)} {t}"
+    """中文 + 英文 + FIFA 三碼，給表格/標題用."""
+    if t not in ZH:
+        return t
+    return f"{ZH[t]} {t} ({FIFA[t]})"
 
 
 def zh(t: str) -> str:
@@ -292,9 +314,9 @@ with tab_sched:
         )
         rows.append({
             "日期": str(r.date.date()), "輪次": f"小組 {r.group}",
-            "主旗": flag_url(r.home_team), "主隊": ZH[r.home_team],
+            "主旗": flag_url(r.home_team), "主隊": tname(r.home_team),
             "比分": score,
-            "客旗": flag_url(r.away_team), "客隊": ZH[r.away_team],
+            "客旗": flag_url(r.away_team), "客隊": tname(r.away_team),
             "城市": CITY_ZH.get(r.city, r.city),
             "_teams": {r.home_team, r.away_team}, "_pending": pd.isna(r.home_score),
         })
@@ -400,7 +422,7 @@ with tab_groups:
             rows, columns=["隊伍", "賽", "積分", "球差", "進球", "晉級32強"]
         )
         df_g.insert(0, "旗", df_g["隊伍"].map(flag_url))
-        df_g["隊伍"] = df_g["隊伍"].map(zh)
+        df_g["隊伍"] = df_g["隊伍"].map(tname)
         with cols[i % 2]:
             st.markdown(f"#### {g} 組")
             st.dataframe(
