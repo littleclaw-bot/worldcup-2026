@@ -36,8 +36,41 @@ FLAGS = {
 }
 
 
+ZH = {
+    "Mexico": "墨西哥", "South Africa": "南非", "South Korea": "南韓",
+    "Czech Republic": "捷克", "Canada": "加拿大",
+    "Bosnia and Herzegovina": "波赫", "Qatar": "卡達", "Switzerland": "瑞士",
+    "Brazil": "巴西", "Morocco": "摩洛哥", "Haiti": "海地", "Scotland": "蘇格蘭",
+    "United States": "美國", "Paraguay": "巴拉圭", "Australia": "澳洲",
+    "Turkey": "土耳其", "Germany": "德國", "Curaçao": "古拉索",
+    "Ivory Coast": "象牙海岸", "Ecuador": "厄瓜多", "Netherlands": "荷蘭",
+    "Japan": "日本", "Sweden": "瑞典", "Tunisia": "突尼西亞",
+    "Belgium": "比利時", "Egypt": "埃及", "Iran": "伊朗",
+    "New Zealand": "紐西蘭", "Spain": "西班牙", "Cape Verde": "維德角",
+    "Saudi Arabia": "沙烏地", "Uruguay": "烏拉圭", "France": "法國",
+    "Senegal": "塞內加爾", "Iraq": "伊拉克", "Norway": "挪威",
+    "Argentina": "阿根廷", "Algeria": "阿爾及利亞", "Austria": "奧地利",
+    "Jordan": "約旦", "Portugal": "葡萄牙", "DR Congo": "民主剛果",
+    "Uzbekistan": "烏茲別克", "Colombia": "哥倫比亞", "England": "英格蘭",
+    "Croatia": "克羅埃西亞", "Ghana": "迦納", "Panama": "巴拿馬",
+}
+
+
 def tname(t: str) -> str:
-    return f"{FLAGS.get(t, '')} {t}"
+    """旗 + 中文 + 英文，給表格/標題用."""
+    return f"{FLAGS.get(t, '')} {ZH.get(t, t)} {t}"
+
+
+def zh(t: str) -> str:
+    """旗 + 中文，給空間小的地方用."""
+    return f"{FLAGS.get(t, '')} {ZH.get(t, t)}"
+
+
+def localize(s: str) -> str:
+    """把字串中的英文隊名換成 旗+中文（長名優先避免部分覆蓋）."""
+    for t in sorted(ZH, key=len, reverse=True):
+        s = s.replace(t, zh(t))
+    return s
 
 
 def _mtimes() -> tuple:
@@ -122,9 +155,9 @@ with tab_match:
             with c2:
                 fig = go.Figure()
                 for name, val, color in [
-                    (r.home_team, p["home"], "#2563eb"),
+                    (zh(r.home_team), p["home"], "#2563eb"),
                     ("和局", p["draw"], "#9ca3af"),
-                    (r.away_team, p["away"], "#dc2626"),
+                    (zh(r.away_team), p["away"], "#dc2626"),
                 ]:
                     fig.add_trace(go.Bar(
                         x=[val], y=[""], name=name, orientation="h",
@@ -258,6 +291,10 @@ with tab_market:
                 "market_p": "市場", "odds": "賠率", "edge": "Edge",
                 "ev_per_unit": "每注期望值",
             })
+            ed2["比賽"] = ed2["比賽"].map(localize)
+            ed2["方向"] = ed2["方向"].map(
+                {"home": "主勝", "draw": "和局", "away": "客勝"}
+            )
             st.dataframe(
                 ed2.style.format(
                     {"模型": "{:.1%}", "市場": "{:.1%}", "Edge": "{:+.1%}",
@@ -277,6 +314,8 @@ with tab_market:
             if "mkt_brier" in sb and sb["mkt_brier"].notna().any():
                 c2.metric("市場 Brier", f"{sb['mkt_brier'].mean():.4f}")
                 c4.metric("市場 LogLoss", f"{sb['mkt_logloss'].mean():.4f}")
+            sb = sb.copy()
+            sb["match"] = sb["match"].map(localize)
             st.dataframe(sb, hide_index=True, width="stretch")
         else:
             st.write("還沒有可計分的已賽場次。")
@@ -284,7 +323,7 @@ with tab_market:
 # ---------------- 單場下鑽 ----------------
 with tab_drill:
     opts = [
-        f"{r.date.date()} [{r.group}] {r.home_team} vs {r.away_team}"
+        f"{r.date.date()} [{r.group}] {zh(r.home_team)} vs {zh(r.away_team)}"
         for r in pending.itertuples()
     ]
     sel = st.selectbox("選一場", opts)
@@ -294,9 +333,9 @@ with tab_drill:
     lam_h, lam_a = model.lambdas(r.home_team, r.away_team, not r.neutral)
 
     c1, c2, c3, c4, c5 = st.columns(5)
-    c1.metric(f"{r.home_team} 勝", f"{p['home']:.0%}")
+    c1.metric(f"{zh(r.home_team)} 勝", f"{p['home']:.0%}")
     c2.metric("和局", f"{p['draw']:.0%}")
-    c3.metric(f"{r.away_team} 勝", f"{p['away']:.0%}")
+    c3.metric(f"{zh(r.away_team)} 勝", f"{p['away']:.0%}")
     c4.metric("預期進球（主）", f"{lam_h:.2f}")
     c5.metric("預期進球（客）", f"{lam_a:.2f}")
 
@@ -305,7 +344,7 @@ with tab_drill:
         grid[:k, :k] * 100,
         x=[str(i) for i in range(k)], y=[str(i) for i in range(k)],
         color_continuous_scale="Blues", text_auto=".1f", aspect="auto",
-        labels=dict(x=f"{r.away_team} 進球", y=f"{r.home_team} 進球",
+        labels=dict(x=f"{zh(r.away_team)} 進球", y=f"{zh(r.home_team)} 進球",
                     color="機率 %"),
     )
     fig.update_layout(height=420, margin=dict(l=0, r=0, t=10, b=0))
