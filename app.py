@@ -600,9 +600,10 @@ with tab_stars:
                     st.markdown(f"**{g['blurb']}**")
                     if g["injury"]:
                         st.markdown(f"🩹 {g['injury']}")
-                pdf = pd.DataFrame(
-                    [{"背號": n, "球員": nm, "位置": pos, "所屬隊": club,
-                      "看點": note}
-                     for n, nm, pos, club, note in g["players"]]
-                )
-                st.dataframe(pdf, hide_index=True, width="stretch")
+                st.markdown("")
+                for n, nm, pos, club, note in g["players"]:
+                    club_txt = f" · {club}" if club and club != "—" else ""
+                    st.markdown(f"**`{n}` {nm}**　<small>{pos}{club_txt}</small>",
+                                unsafe_allow_html=True)
+                    st.markdown(note)
+                    st.markdown("")
