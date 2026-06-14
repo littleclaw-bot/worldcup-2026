@@ -135,15 +135,20 @@ st.sidebar.title("⚽ WC2026 預測")
 
 data.ensure_data()  # 雲端首次啟動沒有 data/，自動補齊
 
+# 過期自動更新：每個 session 只檢查一次（開頁時），之後純互動（篩選、
+# 換分頁）不再觸發下載，避免無謂地讓模型 cache 失效重 fit。
 STALE_HOURS = 6
-_age_h = (pd.Timestamp.now().timestamp() - data.RESULTS_CSV.stat().st_mtime) / 3600
-if _age_h > STALE_HOURS:
-    try:
-        with st.spinner(f"資料已 {_age_h:.0f} 小時未更新，自動抓最新比分 ..."):
-            data.refresh_results()
-        st.toast("✅ 已自動更新比分資料")
-    except Exception as e:
-        st.sidebar.warning(f"自動更新失敗（{e}），先用本地資料")
+if not st.session_state.get("_freshness_checked"):
+    st.session_state["_freshness_checked"] = True
+    _age_h = (pd.Timestamp.now().timestamp()
+              - data.RESULTS_CSV.stat().st_mtime) / 3600
+    if _age_h > STALE_HOURS:
+        try:
+            with st.spinner(f"資料已 {_age_h:.0f} 小時未更新，自動抓最新比分 ..."):
+                data.refresh_results()
+            st.toast("✅ 已自動更新比分資料")
+        except Exception as e:
+            st.sidebar.warning(f"自動更新失敗（{e}），先用本地資料")
 
 if st.sidebar.button("🔄 立刻抓最新比分"):
     with st.spinner("下載 results.csv ..."):
