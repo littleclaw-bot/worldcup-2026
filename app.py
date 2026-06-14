@@ -575,7 +575,7 @@ with tab_drill:
 # ---------------- 球星導覽 ----------------
 with tab_stars:
     st.caption("9 支重點球隊的核心球員（含背號）。資料為 2026-06 正式陣容,"
-               "傷兵狀況賽程中可能變動。")
+               "傷兵狀況賽程中可能變動。💖 = 球迷/媒體公認人氣顏值。")
     for s in STORYLINES:
         st.markdown(f"- {s}")
     st.divider()
