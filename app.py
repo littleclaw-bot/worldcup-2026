@@ -323,9 +323,14 @@ with tab_sched:
         group_filter = st.selectbox(
             "篩選組別", ["全部"] + [f"{g} 組" for g in data.GROUPS]
         )
+    # 隊伍下拉跟著組別連動：選了組就只列該組 4 隊
+    team_pool = (
+        data.GROUPS[group_filter[0]] if group_filter != "全部"
+        else data.ALL_TEAMS
+    )
     with fc2:
         team_filter = st.selectbox(
-            "篩選隊伍", ["全部"] + [tname(t) for t in data.ALL_TEAMS]
+            "篩選隊伍", ["全部"] + [tname(t) for t in team_pool]
         )
     only_pending = st.checkbox("只看未踢", value=False)
 
