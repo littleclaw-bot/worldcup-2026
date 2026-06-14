@@ -318,9 +318,15 @@ def _tw_fmt(ts) -> str:
 
 
 with tab_sched:
-    team_filter = st.selectbox(
-        "篩選隊伍", ["全部"] + [tname(t) for t in data.ALL_TEAMS]
-    )
+    fc1, fc2 = st.columns(2)
+    with fc1:
+        group_filter = st.selectbox(
+            "篩選組別", ["全部"] + [f"{g} 組" for g in data.GROUPS]
+        )
+    with fc2:
+        team_filter = st.selectbox(
+            "篩選隊伍", ["全部"] + [tname(t) for t in data.ALL_TEAMS]
+        )
     only_pending = st.checkbox("只看未踢", value=False)
 
     g_times, ko_times = data.kickoff_times()
@@ -339,7 +345,7 @@ with tab_sched:
             "比分": score,
             "客旗": flag_url(r.away_team), "客隊": tname(r.away_team),
             "城市": CITY_ZH.get(r.city, r.city),
-            "_teams": {r.home_team, r.away_team},
+            "_teams": {r.home_team, r.away_team}, "_group": r.group,
             "_pending": pd.isna(r.home_score),
             "_sort": tw if tw is not None else pd.Timestamp(r.date),
         })
@@ -350,11 +356,13 @@ with tab_sched:
             "輪次": f"{rnd}（{no}）",
             "主旗": None, "主隊": slot_zh(hs), "比分": "—",
             "客旗": None, "客隊": slot_zh(as_),
-            "城市": city, "_teams": set(), "_pending": True,
+            "城市": city, "_teams": set(), "_group": None, "_pending": True,
             "_sort": tw if tw is not None else pd.Timestamp(f"2026-{md}"),
         })
 
     sched = pd.DataFrame(rows).sort_values("_sort")
+    if group_filter != "全部":
+        sched = sched[sched["_group"] == group_filter[0]]
     if team_filter != "全部":
         eng = data.ALL_TEAMS[[tname(t) for t in data.ALL_TEAMS].index(team_filter)]
         sched = sched[sched["_teams"].map(lambda s: eng in s)]
