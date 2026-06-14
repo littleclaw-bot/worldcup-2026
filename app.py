@@ -17,6 +17,7 @@ import streamlit as st
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from wc import data, model as dcmodel, odds as oddsmod, simulate
+from wc.teamguide import TEAM_GUIDE, STORYLINES
 
 st.set_page_config(page_title="WC2026 預測", page_icon="⚽", layout="wide")
 
@@ -178,9 +179,10 @@ st.sidebar.caption(
 played = fixtures[fixtures["home_score"].notna()]
 pending = fixtures[fixtures["home_score"].isna()]
 
-tab_match, tab_sched, tab_title, tab_groups, tab_market, tab_drill = st.tabs(
+(tab_match, tab_sched, tab_title, tab_groups,
+ tab_market, tab_drill, tab_stars) = st.tabs(
     ["📅 賽事預測", "🗓️ 賽程表", "🏆 冠軍機率", "📋 分組形勢",
-     "📊 模型 vs 市場", "🔍 單場下鑽"]
+     "📊 模型 vs 市場", "🔍 單場下鑽", "🌟 球星導覽"]
 )
 
 # ---------------- 賽事預測 ----------------
@@ -569,3 +571,38 @@ with tab_drill:
     st.caption("最可能比分：" + "、".join(
         f"{i}-{j}（{v:.1%}）" for i, j, v in flat[:5]
     ))
+
+# ---------------- 球星導覽 ----------------
+with tab_stars:
+    st.caption("9 支重點球隊的核心球員（含背號）。資料為 2026-06 正式陣容,"
+               "傷兵狀況賽程中可能變動。")
+    for s in STORYLINES:
+        st.markdown(f"- {s}")
+    st.divider()
+
+    champ = get_sim(mt, n_sims).set_index("team")["champion"].to_dict()
+    tiers = ["冠軍熱門", "歐洲傳統強權", "亞洲雙雄"]
+    for tier in tiers:
+        st.subheader(tier)
+        teams = [t for t, g in TEAM_GUIDE.items() if g["tier"] == tier]
+        teams.sort(key=lambda t: champ.get(t, 0), reverse=True)
+        for t in teams:
+            g = TEAM_GUIDE[t]
+            grp = data.TEAM_TO_GROUP[t]
+            title = (f"{tname(t)}　·　{grp} 組　·　冠軍 {champ.get(t, 0):.1%}")
+            with st.expander(title):
+                c1, c2 = st.columns([1, 6])
+                with c1:
+                    fu = flag_url(t)
+                    if fu:
+                        st.image(fu, width=72)
+                with c2:
+                    st.markdown(f"**{g['blurb']}**")
+                    if g["injury"]:
+                        st.markdown(f"🩹 {g['injury']}")
+                pdf = pd.DataFrame(
+                    [{"背號": n, "球員": nm, "位置": pos, "所屬隊": club,
+                      "看點": note}
+                     for n, nm, pos, club, note in g["players"]]
+                )
+                st.dataframe(pdf, hide_index=True, width="stretch")
