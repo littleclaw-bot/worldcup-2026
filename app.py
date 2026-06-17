@@ -5,6 +5,7 @@
 """
 from __future__ import annotations
 
+import re
 import sys
 from pathlib import Path
 
@@ -59,6 +60,20 @@ FIFA = {
     "Colombia": "COL", "England": "ENG", "Croatia": "CRO", "Ghana": "GHA",
     "Panama": "PAN",
 }
+
+
+EUR_TWD = 35  # 近似匯率,會浮動
+
+
+def twd_from_salary(salary: str) -> str:
+    """從薪資字串解析第一個 €XXM,換算約略台幣（億/萬）."""
+    m = re.search(r"€\s*([\d.]+)\s*M", salary)
+    if not m:
+        return ""
+    twd_m = float(m.group(1)) * EUR_TWD  # 百萬台幣
+    if twd_m >= 100:  # ≥ 1 億
+        return f"約台幣 {twd_m / 100:.1f} 億"
+    return f"約台幣 {twd_m * 100:.0f} 萬"
 
 
 def tname(t: str) -> str:
@@ -629,8 +644,9 @@ with tab_drill:
 
 # ---------------- 球星導覽 ----------------
 with tab_stars:
-    st.caption("9 支重點球隊的核心球員（含背號、現役球隊、估計年薪）。"
+    st.caption("10 支重點球隊的核心球員（含背號、現役球隊、估計年薪）。"
                "年薪為俱樂部稅前固定年薪估計值（非國家隊薪資）,標「約」者為概估;"
+               f"台幣以 €1≈NT${EUR_TWD} 概算,匯率會浮動。"
                "傷兵狀況賽程中可能變動。💖 = 球迷/媒體公認人氣顏值。")
     for s in STORYLINES:
         st.markdown(f"- {s}")
@@ -666,8 +682,11 @@ with tab_stars:
                         f"　<small style='color:#888'>{pos}{club_txt}</small>",
                         unsafe_allow_html=True,
                     )
+                    twd = twd_from_salary(salary)
+                    twd_txt = f"　<span style='color:#888'>{twd}</span>" if twd else ""
                     st.markdown(
-                        f"<small>💰 年薪 {salary}</small>", unsafe_allow_html=True
+                        f"<small>💰 年薪 {salary}{twd_txt}</small>",
+                        unsafe_allow_html=True,
                     )
                     st.markdown(note)
                     st.markdown("")
