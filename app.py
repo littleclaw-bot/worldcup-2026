@@ -574,7 +574,8 @@ with tab_drill:
 
 # ---------------- 球星導覽 ----------------
 with tab_stars:
-    st.caption("9 支重點球隊的核心球員（含背號）。資料為 2026-06 正式陣容,"
+    st.caption("9 支重點球隊的核心球員（含背號、現役球隊、估計年薪）。"
+               "年薪為俱樂部稅前固定年薪估計值（非國家隊薪資）,標「約」者為概估;"
                "傷兵狀況賽程中可能變動。💖 = 球迷/媒體公認人氣顏值。")
     for s in STORYLINES:
         st.markdown(f"- {s}")
@@ -601,7 +602,7 @@ with tab_stars:
                     if g["injury"]:
                         st.markdown(f"🩹 {g['injury']}")
                 st.markdown("")
-                for n, nm, pos, club, note in g["players"]:
+                for n, nm, pos, club, salary, note in g["players"]:
                     club_txt = f" · {club}" if club and club != "—" else ""
                     st.markdown(
                         f"<span style='font-size:1.5em;font-weight:800;"
@@ -609,6 +610,9 @@ with tab_stars:
                         f"<span style='font-size:1.15em;font-weight:700'>{nm}</span>"
                         f"　<small style='color:#888'>{pos}{club_txt}</small>",
                         unsafe_allow_html=True,
+                    )
+                    st.markdown(
+                        f"<small>💰 年薪 {salary}</small>", unsafe_allow_html=True
                     )
                     st.markdown(note)
                     st.markdown("")
