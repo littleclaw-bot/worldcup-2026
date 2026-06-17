@@ -112,6 +112,10 @@ def main() -> None:
     print("\n=== title race (top 15, % chance to reach each round) ===")
     print(top.to_string(index=False))
 
+    # --- 累積今日歷史快照（給「歷史走勢」分頁）---
+    import snapshot_history
+    snapshot_history.run([pd.Timestamp.now().normalize()], n_sims=args.sims)
+
 
 if __name__ == "__main__":
     main()

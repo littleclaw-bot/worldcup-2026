@@ -179,10 +179,10 @@ st.sidebar.caption(
 played = fixtures[fixtures["home_score"].notna()]
 pending = fixtures[fixtures["home_score"].isna()]
 
-(tab_match, tab_sched, tab_title, tab_groups,
- tab_market, tab_drill, tab_stars) = st.tabs(
+(tab_match, tab_sched, tab_title, tab_groups, tab_market,
+ tab_history, tab_drill, tab_stars) = st.tabs(
     ["📅 賽事預測", "🗓️ 賽程表", "🏆 冠軍機率", "📋 分組形勢",
-     "📊 模型 vs 市場", "🔍 單場下鑽", "🌟 球星導覽"]
+     "📊 模型 vs 市場", "📈 歷史走勢", "🔍 單場下鑽", "🌟 球星導覽"]
 )
 
 # ---------------- 賽事預測 ----------------
@@ -535,6 +535,61 @@ with tab_market:
             st.dataframe(sb, hide_index=True, width="stretch")
         else:
             st.write("還沒有可計分的已賽場次。")
+
+# ---------------- 歷史走勢 ----------------
+with tab_history:
+    odds_hist_path = data.DATA_DIR / "history" / "odds_history.csv"
+    calib_hist_path = data.DATA_DIR / "history" / "calibration_history.csv"
+    st.caption("每日預測快照累積的走勢。每天更新會 append 一筆,看機率隨賽事演變。")
+
+    if not odds_hist_path.exists():
+        st.info("還沒有歷史快照。跑 `python snapshot_history.py --backfill` 產生。")
+    else:
+        oh = pd.read_csv(odds_hist_path, parse_dates=["date"])
+        round_map = {"冠軍": "champion", "決賽": "F", "4 強": "SF",
+                     "8 強": "QF", "16 強": "R16", "32 強": "R32"}
+        rsel = st.radio("看哪一輪的機率", list(round_map), horizontal=True)
+        rcol = round_map[rsel]
+
+        latest = oh[oh["date"] == oh["date"].max()]
+        default = latest.nlargest(6, rcol)["team"].tolist()
+        all_teams = (oh.groupby("team")[rcol].max()
+                     .sort_values(ascending=False).index.tolist())
+        picked = st.multiselect(
+            "選球隊", options=all_teams, default=default,
+            format_func=lambda t: zh(t),
+        )
+        if picked:
+            sub = oh[oh["team"].isin(picked)].copy()
+            sub["隊伍"] = sub["team"].map(zh)
+            fig = px.line(
+                sub, x="date", y=rcol, color="隊伍", markers=True,
+                labels={"date": "日期", rcol: f"{rsel}機率"},
+            )
+            fig.update_layout(height=440, yaxis_tickformat=".0%",
+                              margin=dict(l=0, r=0, t=10, b=0))
+            st.plotly_chart(fig, width="stretch")
+            st.caption("註:過去日期為「以該日視角」回算(只用當天前資料 + 之後比賽當未踢)。")
+        else:
+            st.write("選至少一支球隊。")
+
+        if calib_hist_path.exists():
+            st.divider()
+            st.subheader("🎯 模型 vs 市場 校準走勢（Brier,越低越準）")
+            ch = pd.read_csv(calib_hist_path, parse_dates=["date"])
+            plot = ch.melt(
+                id_vars=["date"], value_vars=["model_brier", "mkt_brier"],
+                var_name="來源", value_name="Brier",
+            ).dropna(subset=["Brier"])
+            plot["來源"] = plot["來源"].map(
+                {"model_brier": "模型", "mkt_brier": "市場"}
+            )
+            if len(plot):
+                fig2 = px.line(plot, x="date", y="Brier", color="來源",
+                               markers=True, labels={"date": "日期"})
+                fig2.update_layout(height=360, margin=dict(l=0, r=0, t=10, b=0))
+                st.plotly_chart(fig2, width="stretch")
+                st.caption("有賠率的已賽場次才計分,初期樣本少、會抖動。")
 
 # ---------------- 單場下鑽 ----------------
 with tab_drill:
