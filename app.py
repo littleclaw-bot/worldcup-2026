@@ -18,7 +18,7 @@ import streamlit as st
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from wc import data, model as dcmodel, odds as oddsmod, simulate
-from wc.teamguide import TEAM_GUIDE, STORYLINES
+from wc.teamguide import TEAM_GUIDE, STORYLINES, MARKET_VALUE
 
 st.set_page_config(page_title="WC2026 預測", page_icon="⚽", layout="wide")
 
@@ -644,10 +644,10 @@ with tab_drill:
 
 # ---------------- 球星導覽 ----------------
 with tab_stars:
-    st.caption("10 支重點球隊的核心球員（含背號、現役球隊、估計年薪）。"
-               "年薪為俱樂部稅前固定年薪估計值（非國家隊薪資）,標「約」者為概估;"
-               f"台幣以 €1≈NT${EUR_TWD} 概算,匯率會浮動。"
-               "傷兵狀況賽程中可能變動。💖 = 球迷/媒體公認人氣顏值。")
+    st.caption("10 支重點球隊的核心球員（含背號、現役球隊、年薪、身價）。"
+               "💰年薪=俱樂部稅前固定年薪估計;📈身價=Transfermarkt 市值概值"
+               "（看「現在值多少」最準,隨表現/轉會窗大幅變動）。標「約」者為概估,"
+               f"台幣以 €1≈NT${EUR_TWD} 概算。💖 = 球迷/媒體公認人氣顏值。")
     for s in STORYLINES:
         st.markdown(f"- {s}")
     st.divider()
@@ -684,8 +684,14 @@ with tab_stars:
                     )
                     twd = twd_from_salary(salary)
                     twd_txt = f"　<span style='color:#888'>{twd}</span>" if twd else ""
+                    mv = MARKET_VALUE.get(nm, "")
+                    mv_twd = twd_from_salary(mv)
+                    mv_txt = (
+                        f"　📈 身價 {mv}　<span style='color:#888'>{mv_twd}</span>"
+                        if mv else ""
+                    )
                     st.markdown(
-                        f"<small>💰 年薪 {salary}{twd_txt}</small>",
+                        f"<small>💰 年薪 {salary}{twd_txt}{mv_txt}</small>",
                         unsafe_allow_html=True,
                     )
                     st.markdown(note)
