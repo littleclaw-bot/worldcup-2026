@@ -18,7 +18,7 @@ import streamlit as st
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from wc import data, model as dcmodel, odds as oddsmod, simulate
-from wc.teamguide import TEAM_GUIDE, STORYLINES, MARKET_VALUE
+from wc.teamguide import TEAM_GUIDE, STORYLINES, MARKET_VALUE, BIRTH
 
 st.set_page_config(page_title="WC2026 預測", page_icon="⚽", layout="wide")
 
@@ -74,6 +74,17 @@ def twd_from_salary(salary: str) -> str:
     if twd_m >= 100:  # ≥ 1 億
         return f"約台幣 {twd_m / 100:.1f} 億"
     return f"約台幣 {twd_m * 100:.0f} 萬"
+
+
+def age_str(name: str) -> str:
+    """依當下日期動態算現齡,回傳『 · 🎂 XX 歲（YYYY）』."""
+    bd = BIRTH.get(name)
+    if not bd:
+        return ""
+    y, m, d = map(int, bd.split("-"))
+    now = pd.Timestamp.now()
+    age = now.year - y - ((now.month, now.day) < (m, d))
+    return f" · 🎂 {age} 歲（{y}）"
 
 
 def tname(t: str) -> str:
@@ -679,7 +690,8 @@ with tab_stars:
                         f"<span style='font-size:1.5em;font-weight:800;"
                         f"color:#16a34a'>{n}</span>　"
                         f"<span style='font-size:1.15em;font-weight:700'>{nm}</span>"
-                        f"　<small style='color:#888'>{pos}{club_txt}</small>",
+                        f"　<small style='color:#888'>{pos}{club_txt}"
+                        f"{age_str(nm)}</small>",
                         unsafe_allow_html=True,
                     )
                     twd = twd_from_salary(salary)
