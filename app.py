@@ -17,7 +17,7 @@ import streamlit as st
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from wc import data, model as dcmodel, odds as oddsmod, simulate
+from wc import data, model as dcmodel, odds as oddsmod, simulate, elo as elomod
 from wc.teamguide import TEAM_GUIDE, STORYLINES, MARKET_VALUE, BIRTH
 
 st.set_page_config(page_title="WC2026 預測", page_icon="⚽", layout="wide")
@@ -157,6 +157,12 @@ def get_sim(mtimes: tuple, n_sims: int) -> pd.DataFrame:
     return simulate.simulate_tournament(m, data.wc_fixtures(df), n_sims=n_sims)
 
 
+@st.cache_data(show_spinner="計算 Elo ...")
+def get_elo(mtimes: tuple) -> dict:
+    _, df, _ = get_model(mtimes)
+    return elomod.compute_elo(df)
+
+
 # ---------------- sidebar ----------------
 st.sidebar.title("⚽ WC2026 預測")
 
@@ -205,9 +211,9 @@ st.sidebar.caption(
 played = fixtures[fixtures["home_score"].notna()]
 pending = fixtures[fixtures["home_score"].isna()]
 
-(tab_match, tab_sched, tab_title, tab_groups, tab_market,
+(tab_match, tab_sched, tab_title, tab_elo, tab_groups, tab_market,
  tab_history, tab_drill, tab_stars) = st.tabs(
-    ["📅 賽事預測", "🗓️ 賽程表", "🏆 冠軍機率", "📋 分組形勢",
+    ["📅 賽事預測", "🗓️ 賽程表", "🏆 冠軍機率", "💪 Elo 實力榜", "📋 分組形勢",
      "📊 模型 vs 市場", "📈 歷史走勢", "🔍 單場下鑽", "🌟 球星導覽"]
 )
 
@@ -467,6 +473,53 @@ with tab_title:
         hide_index=True, width="stretch", height=600,
         column_config={"旗": st.column_config.ImageColumn("", width=36)},
     )
+
+# ---------------- Elo 實力榜 ----------------
+with tab_elo:
+    st.caption(
+        "Elo 用一個數字代表實力（西洋棋評分系統,搬到足球）。從 1872 年至今"
+        "所有國際賽結果自行計算:贏球加分、輸球扣分,爆冷贏加更多、大勝加更多、"
+        "世界盃權重 > 友誼賽。與左邊『冠軍機率』(Poisson 模擬)是兩套獨立方法,可互相印證。"
+    )
+    elo = get_elo(mt)
+    champ = get_sim(mt, n_sims).set_index("team")["champion"].to_dict()
+    rows = [
+        {"team": t, "group": data.TEAM_TO_GROUP[t],
+         "elo": round(elo.get(t, 1500)), "champ": champ.get(t, 0)}
+        for t in data.ALL_TEAMS
+    ]
+    edf = pd.DataFrame(rows).sort_values("elo", ascending=False).reset_index(drop=True)
+    edf.insert(0, "排名", edf.index + 1)
+
+    top_n = st.slider("顯示前幾名", 10, 48, 20, key="elo_top")
+    show = edf.head(top_n).iloc[::-1]
+    fig = px.bar(
+        show, x="elo", y="team", orientation="h",
+        text="elo", color="elo", color_continuous_scale="Tealgrn",
+    )
+    fig.update_traces(textposition="outside")
+    fig.update_layout(
+        height=26 * top_n + 80, coloraxis_showscale=False,
+        xaxis_title="Elo 實力分", yaxis_title="",
+        xaxis_range=[show["elo"].min() - 60, show["elo"].max() + 60],
+        yaxis=dict(ticktext=[tname(t) for t in show["team"]], tickvals=show["team"]),
+        margin=dict(l=0, r=30, t=10, b=0),
+    )
+    st.plotly_chart(fig, width="stretch")
+
+    disp = edf.copy()
+    disp.insert(1, "旗", disp["team"].map(flag_url))
+    disp["team"] = disp["team"].map(tname)
+    disp = disp.rename(columns={"team": "隊伍", "group": "組",
+                                "elo": "Elo", "champ": "模型冠軍率"})
+    st.dataframe(
+        disp.style.format({"模型冠軍率": "{:.1%}"}).background_gradient(
+            subset=["Elo"], cmap="Greens"),
+        hide_index=True, width="stretch", height=560,
+        column_config={"旗": st.column_config.ImageColumn("", width=36)},
+    )
+    st.caption("💡 Elo 排名與模型冠軍率高度一致 → 兩套獨立方法互相印證;"
+               "若某隊兩者分歧大,值得深究(可能 Elo 沒反映近期陣容變化)。")
 
 # ---------------- 分組形勢 ----------------
 with tab_groups:
