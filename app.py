@@ -649,6 +649,18 @@ with tab_history:
                               margin=dict(l=0, r=0, t=10, b=0))
             st.plotly_chart(fig, width="stretch")
             st.caption("註:過去日期為「以該日視角」回算(只用當天前資料 + 之後比賽當未踢)。")
+
+            elo_hist_path = data.DATA_DIR / "history" / "elo_history.csv"
+            if elo_hist_path.exists():
+                st.subheader("💪 Elo 實力走勢（同上選的球隊）")
+                eh = pd.read_csv(elo_hist_path, parse_dates=["date"])
+                esub = eh[eh["team"].isin(picked)].copy()
+                esub["隊伍"] = esub["team"].map(zh)
+                efig = px.line(esub, x="date", y="elo", color="隊伍",
+                               markers=True, labels={"date": "日期", "elo": "Elo 分"})
+                efig.update_layout(height=400, margin=dict(l=0, r=0, t=10, b=0))
+                st.plotly_chart(efig, width="stretch")
+                st.caption("Elo 隨比賽即時調整:贏球加分、爆冷加更多。看誰的實力曲線在世足期間爬升/下滑。")
         else:
             st.write("選至少一支球隊。")
 

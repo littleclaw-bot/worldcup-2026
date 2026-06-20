@@ -24,11 +24,12 @@ import pandas as pd
 sys.stdout.reconfigure(encoding="utf-8")
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from wc import data, model as dcmodel, odds as oddsmod, simulate
+from wc import data, model as dcmodel, odds as oddsmod, simulate, elo as elomod
 
 HIST_DIR = data.DATA_DIR / "history"
 ODDS_HIST = HIST_DIR / "odds_history.csv"
 CALIB_HIST = HIST_DIR / "calibration_history.csv"
+ELO_HIST = HIST_DIR / "elo_history.csv"
 TOURNAMENT_START = "2026-06-11"
 
 
@@ -42,10 +43,17 @@ def _fixtures_asof(fixtures: pd.DataFrame, asof: pd.Timestamp) -> pd.DataFrame:
 
 def snapshot(df: pd.DataFrame, fixtures: pd.DataFrame, asof: pd.Timestamp,
              odds: pd.DataFrame, n_sims: int = 8000):
-    """回傳 (champion_rows: DataFrame, calib_row: dict|None) 以 asof 視角."""
+    """回傳 (champion_rows, calib_row|None, elo_rows) 以 asof 視角."""
     train = data.training_matches(df, asof=asof)
     m = dcmodel.fit(train)
     f_asof = _fixtures_asof(fixtures, asof)
+
+    # Elo:只用 asof(含)之前的比賽
+    elo = elomod.compute_elo(df[df["date"] <= asof])
+    elo_rows = pd.DataFrame([
+        {"date": asof.date().isoformat(), "team": t, "elo": round(elo.get(t, 1500))}
+        for t in data.ALL_TEAMS
+    ])
 
     tab = simulate.simulate_tournament(m, f_asof, n_sims=n_sims)
     tab = tab.drop(columns=["group"]).copy()
@@ -69,7 +77,7 @@ def snapshot(df: pd.DataFrame, fixtures: pd.DataFrame, asof: pd.Timestamp,
             "mkt_logloss": round(sb["mkt_logloss"].mean(), 4)
             if "mkt_logloss" in sb and sb["mkt_logloss"].notna().any() else np.nan,
         }
-    return tab, calib
+    return tab, calib, elo_rows
 
 
 def _append_dedup(path: Path, new: pd.DataFrame, keys: list[str]) -> None:
@@ -89,8 +97,9 @@ def run(asofs: list[pd.Timestamp], n_sims: int = 8000) -> None:
     fixtures = data.wc_fixtures(df)
     odds = oddsmod.load_odds()
     for asof in asofs:
-        tab, calib = snapshot(df, fixtures, asof, odds, n_sims=n_sims)
+        tab, calib, elo_rows = snapshot(df, fixtures, asof, odds, n_sims=n_sims)
         _append_dedup(ODDS_HIST, tab, keys=["date", "team"])
+        _append_dedup(ELO_HIST, elo_rows, keys=["date", "team"])
         if calib is not None:
             _append_dedup(CALIB_HIST, pd.DataFrame([calib]), keys=["date"])
         top = tab.nlargest(3, "champion")[["team", "champion"]]
