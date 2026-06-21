@@ -19,7 +19,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from wc import (
     data, model as dcmodel, odds as oddsmod, simulate, elo as elomod,
-    bracket as bracketmod,
+    bracket as bracketmod, live as livemod,
 )
 from wc.teamguide import TEAM_GUIDE, STORYLINES, MARKET_VALUE, BIRTH
 
@@ -193,29 +193,56 @@ def _mtimes() -> tuple:
     return tuple(p.stat().st_mtime if p.exists() else 0 for p in paths)
 
 
+@st.cache_data(ttl=300, show_spinner="抓即時比分 (ESPN) ...")
+def get_live(mtimes: tuple) -> tuple:
+    """ESPN FT 比分,回 hashable live_key（每 5 分鐘刷新一次）.
+
+    回傳排序後的 ((home, away, hs, as), ...) tuple,可直接當 cache key,
+    也能還原成 dict 給 apply_live_scores。失敗回空 tuple → fallback 純 martj42。
+    """
+    sc = livemod.fetch_wc_live_results()
+    return tuple(sorted((h, a, hs, as_) for (h, a), (hs, as_) in sc.items()))
+
+
+def _live_dict(live_key: tuple) -> dict:
+    return {(h, a): (hs, as_) for h, a, hs, as_ in live_key}
+
+
+@st.cache_data(show_spinner=False)
+def get_martj42_missing(mtimes: tuple) -> set:
+    """原始 martj42 裡『還沒比分』的世足對戰（隊伍集合）,給即時狀態比對用."""
+    raw = data.load_results()
+    wc = raw[(raw["tournament"] == "FIFA World Cup") & (raw["date"] >= "2026-06-01")]
+    return {
+        frozenset((r.home_team, r.away_team))
+        for r in wc.itertuples() if pd.isna(r.home_score)
+    }
+
+
 @st.cache_resource(show_spinner="fit 模型中 ...")
-def get_model(mtimes: tuple):
+def get_model(mtimes: tuple, live_key: tuple):
     df = data.load_results()
+    df = livemod.apply_live_scores(df, _live_dict(live_key))  # ESPN 即時補
     train = data.training_matches(df)
     m = dcmodel.fit(train)
     return m, df, len(train)
 
 
 @st.cache_data(show_spinner="Monte Carlo 模擬中 ...")
-def get_sim(mtimes: tuple, n_sims: int) -> pd.DataFrame:
-    m, df, _ = get_model(mtimes)
+def get_sim(mtimes: tuple, n_sims: int, live_key: tuple) -> pd.DataFrame:
+    m, df, _ = get_model(mtimes, live_key)
     return simulate.simulate_tournament(m, data.wc_fixtures(df), n_sims=n_sims)
 
 
 @st.cache_data(show_spinner="計算 Elo ...")
-def get_elo(mtimes: tuple) -> dict:
-    _, df, _ = get_model(mtimes)
+def get_elo(mtimes: tuple, live_key: tuple) -> dict:
+    _, df, _ = get_model(mtimes, live_key)
     return elomod.compute_elo(df)
 
 
 @st.cache_data(show_spinner="推算對戰樹 ...")
-def get_bracket(mtimes: tuple, n_sims: int):
-    m, df, _ = get_model(mtimes)
+def get_bracket(mtimes: tuple, n_sims: int, live_key: tuple):
+    m, df, _ = get_model(mtimes, live_key)
     return bracketmod.predicted_bracket(m, data.wc_fixtures(df), n_sims=n_sims)
 
 
@@ -249,9 +276,14 @@ if st.sidebar.button("🔄 立刻抓最新比分"):
 n_sims = st.sidebar.select_slider("模擬次數", [2000, 5000, 10000, 20000], value=10000)
 
 mt = _mtimes()
-model, results_df, n_train = get_model(mt)
+live_key = get_live(mt)  # ESPN 即時 FT 比分（cache 5 分鐘）
+model, results_df, n_train = get_model(mt, live_key)
 fixtures = data.wc_fixtures(results_df)
 odds = oddsmod.load_odds()
+
+# 算「ESPN 補了幾場 martj42 還沒有的」→ 給側欄即時狀態
+_missing = get_martj42_missing(mt)
+_live_only = sum(1 for h, a, _, _ in live_key if frozenset((h, a)) in _missing)
 
 _fetched = (
     pd.Timestamp(data.RESULTS_CSV.stat().st_mtime, unit="s", tz="UTC")
@@ -263,6 +295,10 @@ st.sidebar.caption(
     f"資料最後日期：{results_df['date'].max().date()}\n\n"
     f"資料抓取時間：{_fetched:%Y-%m-%d %H:%M}"
 )
+if _live_only:
+    st.sidebar.success(f"🔴 ESPN 即時補了 {_live_only} 場 martj42 還沒更新的比分")
+elif live_key:
+    st.sidebar.caption(f"🟢 ESPN 即時比分已同步（martj42 也已跟上）")
 
 played = fixtures[fixtures["home_score"].notna()]
 pending = fixtures[fixtures["home_score"].isna()]
@@ -495,7 +531,7 @@ with tab_sched:
 
 # ---------------- 冠軍機率 ----------------
 with tab_title:
-    tab = get_sim(mt, n_sims)
+    tab = get_sim(mt, n_sims, live_key)
     top_n = st.slider("顯示前幾名", 5, 48, 16)
     show = tab.head(top_n).iloc[::-1]
     fig = px.bar(
@@ -537,7 +573,7 @@ with tab_bracket:
         "組合,之後每場由模型算勝率(含延長賽/PK)讓較強者晉級。這是**最可能的單一劇本**,"
         "不代表必然——每場都有冷門空間,真正的機率看『🏆 冠軍機率』分頁。"
     )
-    br, champion, meet = get_bracket(mt, n_sims)
+    br, champion, meet = get_bracket(mt, n_sims, live_key)
     final = br[104]
 
     c1, c2 = st.columns([3, 2])
@@ -618,8 +654,8 @@ with tab_elo:
         "所有國際賽結果自行計算:贏球加分、輸球扣分,爆冷贏加更多、大勝加更多、"
         "世界盃權重 > 友誼賽。與左邊『冠軍機率』(Poisson 模擬)是兩套獨立方法,可互相印證。"
     )
-    elo = get_elo(mt)
-    champ = get_sim(mt, n_sims).set_index("team")["champion"].to_dict()
+    elo = get_elo(mt, live_key)
+    champ = get_sim(mt, n_sims, live_key).set_index("team")["champion"].to_dict()
     rows = [
         {"team": t, "group": data.TEAM_TO_GROUP[t],
          "elo": round(elo.get(t, 1500)), "champ": champ.get(t, 0)}
@@ -660,7 +696,7 @@ with tab_elo:
 
 # ---------------- 分組形勢 ----------------
 with tab_groups:
-    tab = get_sim(mt, n_sims)
+    tab = get_sim(mt, n_sims, live_key)
     adv = tab.set_index("team")["R32"]
     cols = st.columns(2)
     for i, (g, teams) in enumerate(data.GROUPS.items()):
@@ -865,7 +901,7 @@ with tab_stars:
         st.markdown(f"- {s}")
     st.divider()
 
-    champ = get_sim(mt, n_sims).set_index("team")["champion"].to_dict()
+    champ = get_sim(mt, n_sims, live_key).set_index("team")["champion"].to_dict()
     tiers = ["冠軍熱門", "歐洲傳統強權", "亞洲雙雄"]
     for tier in tiers:
         st.subheader(tier)
