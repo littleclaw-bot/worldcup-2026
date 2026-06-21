@@ -17,7 +17,10 @@ import streamlit as st
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from wc import data, model as dcmodel, odds as oddsmod, simulate, elo as elomod
+from wc import (
+    data, model as dcmodel, odds as oddsmod, simulate, elo as elomod,
+    bracket as bracketmod,
+)
 from wc.teamguide import TEAM_GUIDE, STORYLINES, MARKET_VALUE, BIRTH
 
 st.set_page_config(page_title="WC2026 預測", page_icon="⚽", layout="wide")
@@ -138,6 +141,53 @@ def localize(s: str) -> str:
     return s
 
 
+def bracket_dot(br: dict, champion: str) -> str:
+    """把預測對戰樹轉成 graphviz DOT（左→右,冠軍之路金色高亮）.
+
+    用 HTML 表格讓「隊名靠左、勝率靠右」分兩欄對齊（欄寬固定,中文長短不一
+    也不會參差）;fontname 指定 CJK 字型讓瀏覽器渲染得出中文。
+    """
+    def row(team: str, p: float, win: bool) -> str:
+        color = "#137333" if win else "#9aa0a6"
+        b0, b1 = ("<B>", "</B>") if win else ("", "")
+        return (
+            f'<TR><TD ALIGN="LEFT" WIDTH="78">'
+            f'<FONT COLOR="{color}">{b0}{zh(team)}{b1}</FONT></TD>'
+            f'<TD ALIGN="RIGHT" WIDTH="46">'
+            f'<FONT COLOR="{color}">{b0}{p * 100:.0f}%{b1}</FONT></TD></TR>'
+        )
+
+    lines = [
+        "digraph B {",
+        "  rankdir=LR; bgcolor=transparent; ranksep=0.45; nodesep=0.12;",
+        '  node [shape=box, style="rounded,filled",'
+        ' fontname="Microsoft JhengHei,PingFang TC,sans-serif",'
+        ' fontsize=14, color="#d0d0d0", fillcolor="white", margin="0.14,0.08"];',
+        '  edge [color="#c4c4c4", arrowsize=0.5];',
+    ]
+    for no, b in br.items():
+        home_win = b["winner"] == b["home"]
+        label = (
+            '<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="3">'
+            + row(b["home"], b["p_home"], home_win)
+            + row(b["away"], 1 - b["p_home"], not home_win)
+            + "</TABLE>>"
+        )
+        attrs = [f"label={label}"]
+        if b["winner"] == champion:
+            attrs += ['color="#e0a800"', "penwidth=2"]
+        if no == 104:
+            attrs.append('fillcolor="#fff3cd"')
+        lines.append(f'  m{no} [{", ".join(attrs)}];')
+    for _rn, matches in data.KNOCKOUT_ROUNDS:
+        for mno, hs, as_slot, _venue in matches:
+            for s in (hs, as_slot):
+                if s.startswith("W"):
+                    lines.append(f"  m{s[1:]} -> m{mno};")
+    lines.append("}")
+    return "\n".join(lines)
+
+
 def _mtimes() -> tuple:
     paths = [data.RESULTS_CSV, oddsmod.ODDS_CSV]
     return tuple(p.stat().st_mtime if p.exists() else 0 for p in paths)
@@ -161,6 +211,12 @@ def get_sim(mtimes: tuple, n_sims: int) -> pd.DataFrame:
 def get_elo(mtimes: tuple) -> dict:
     _, df, _ = get_model(mtimes)
     return elomod.compute_elo(df)
+
+
+@st.cache_data(show_spinner="推算對戰樹 ...")
+def get_bracket(mtimes: tuple, n_sims: int):
+    m, df, _ = get_model(mtimes)
+    return bracketmod.predicted_bracket(m, data.wc_fixtures(df), n_sims=n_sims)
 
 
 # ---------------- sidebar ----------------
@@ -211,10 +267,10 @@ st.sidebar.caption(
 played = fixtures[fixtures["home_score"].notna()]
 pending = fixtures[fixtures["home_score"].isna()]
 
-(tab_match, tab_sched, tab_title, tab_elo, tab_groups, tab_market,
+(tab_match, tab_sched, tab_title, tab_bracket, tab_elo, tab_groups, tab_market,
  tab_history, tab_drill, tab_stars) = st.tabs(
-    ["📅 賽事預測", "🗓️ 賽程表", "🏆 冠軍機率", "💪 Elo 實力榜", "📋 分組形勢",
-     "📊 模型 vs 市場", "📈 歷史走勢", "🔍 單場下鑽", "🌟 球星導覽"]
+    ["📅 賽事預測", "🗓️ 賽程表", "🏆 冠軍機率", "🗺️ 對戰樹", "💪 Elo 實力榜",
+     "📋 分組形勢", "📊 模型 vs 市場", "📈 歷史走勢", "🔍 單場下鑽", "🌟 球星導覽"]
 )
 
 # ---------------- 賽事預測 ----------------
@@ -472,6 +528,87 @@ with tab_title:
         ),
         hide_index=True, width="stretch", height=600,
         column_config={"旗": st.column_config.ImageColumn("", width=36)},
+    )
+
+# ---------------- 對戰樹 ----------------
+with tab_bracket:
+    st.caption(
+        "把模型推成一條「最可能的淘汰賽路徑」：32 強對戰取蒙地卡羅裡最常出現的"
+        "組合,之後每場由模型算勝率(含延長賽/PK)讓較強者晉級。這是**最可能的單一劇本**,"
+        "不代表必然——每場都有冷門空間,真正的機率看『🏆 冠軍機率』分頁。"
+    )
+    br, champion, meet = get_bracket(mt, n_sims)
+    final = br[104]
+
+    c1, c2 = st.columns([3, 2])
+    with c1:
+        st.markdown(f"### 🏆 預測冠軍：{tname(champion)}")
+    with c2:
+        st.markdown(
+            f"#### 預測決賽\n{zh(final['home'])} vs {zh(final['away'])} "
+            f"→ **{zh(final['winner'])}** {final['win_p'] * 100:.0f}%"
+        )
+
+    st.graphviz_chart(bracket_dot(br, champion), width="content")
+    st.caption(
+        "🟩 綠字＝該場預測晉級者及其勝率　|　🟨 金框＝冠軍的晉級之路"
+    )
+
+    with st.expander("👑 冠軍晉級之路（逐輪對手與勝率）"):
+        path = sorted(
+            (b for b in br.values() if b["winner"] == champion),
+            key=lambda b: bracketmod.ROUND_ORDER.index(b["round"]),
+        )
+        rows = []
+        for b in path:
+            opp = b["away"] if b["winner"] == b["home"] else b["home"]
+            rows.append({
+                "輪次": bracketmod.ROUND_ZH[b["round"]],
+                "對手": tname(opp), "勝率": b["win_p"],
+            })
+        st.dataframe(
+            pd.DataFrame(rows).style.format({"勝率": "{:.0%}"}).background_gradient(
+                subset=["勝率"], cmap="Greens", vmin=0.4, vmax=1.0),
+            hide_index=True, width="stretch",
+        )
+
+    st.divider()
+    st.subheader("✨ 夢幻對決機率")
+    st.caption("任選兩隊,算牠們在淘汰賽『碰頭』的機率(單屆最多遇一次,各輪相加即總機率)。")
+    opts = data.ALL_TEAMS
+    dc1, dc2 = st.columns(2)
+    with dc1:
+        ta = st.selectbox("隊伍 A", opts, index=opts.index("Argentina"),
+                          format_func=tname, key="dm_a")
+    with dc2:
+        tb = st.selectbox("隊伍 B", opts, index=opts.index("Brazil"),
+                          format_func=tname, key="dm_b")
+    if ta == tb:
+        st.info("請選兩支不同的球隊。")
+    else:
+        tot, byr = bracketmod.meeting_breakdown(meet, n_sims, ta, tb)
+        st.metric(f"{zh(ta)} ⚔️ {zh(tb)}　淘汰賽相遇機率", f"{tot * 100:.1f}%")
+        bdf = pd.DataFrame(
+            [{"輪次": bracketmod.ROUND_ZH[rn], "機率": byr[rn]}
+             for rn in bracketmod.ROUND_ORDER]
+        )
+        fig = px.bar(bdf, x="輪次", y="機率", text="機率")
+        fig.update_traces(texttemplate="%{text:.1%}", textposition="outside",
+                          marker_color="#2a9d8f")
+        fig.update_layout(yaxis_tickformat=".0%", height=260,
+                          margin=dict(l=0, r=0, t=10, b=0),
+                          yaxis_title="", xaxis_title="")
+        st.plotly_chart(fig, width="stretch")
+
+    st.markdown("#### 🥇 最可能的決賽對戰 Top 8")
+    fdf = pd.DataFrame(
+        [{"決賽對戰": f"{tname(a)}  vs  {tname(b)}", "機率": p}
+         for a, b, p in bracketmod.likely_finals(meet, n_sims, 8)]
+    )
+    st.dataframe(
+        fdf.style.format({"機率": "{:.1%}"}).background_gradient(
+            subset=["機率"], cmap="Greens"),
+        hide_index=True, width="stretch",
     )
 
 # ---------------- Elo 實力榜 ----------------
