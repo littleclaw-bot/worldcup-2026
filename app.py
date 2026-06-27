@@ -19,7 +19,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from wc import (
     data, model as dcmodel, odds as oddsmod, simulate, elo as elomod,
-    bracket as bracketmod, live as livemod,
+    bracket as bracketmod, live as livemod, scorers as scorersmod,
 )
 from wc.teamguide import TEAM_GUIDE, STORYLINES, MARKET_VALUE, BIRTH
 
@@ -246,6 +246,12 @@ def get_bracket(mtimes: tuple, n_sims: int, live_key: tuple):
     return bracketmod.predicted_bracket(m, data.wc_fixtures(df), n_sims=n_sims)
 
 
+@st.cache_data(ttl=300, show_spinner="抓射手榜 (ESPN) ...")
+def get_scorers() -> pd.DataFrame:
+    """ESPN 逐場進球紀錄組出的個人射手榜（cache 5 分鐘）。失敗回空 DataFrame."""
+    return scorersmod.fetch_wc_scorers()
+
+
 # ---------------- sidebar ----------------
 st.sidebar.title("⚽ WC2026 預測")
 
@@ -304,9 +310,10 @@ played = fixtures[fixtures["home_score"].notna()]
 pending = fixtures[fixtures["home_score"].isna()]
 
 (tab_match, tab_sched, tab_title, tab_bracket, tab_elo, tab_groups, tab_market,
- tab_history, tab_drill, tab_stars) = st.tabs(
+ tab_history, tab_drill, tab_stars, tab_scorers) = st.tabs(
     ["📅 賽事預測", "🗓️ 賽程表", "🏆 冠軍機率", "🗺️ 對戰樹", "💪 Elo 實力榜",
-     "📋 分組形勢", "📊 模型 vs 市場", "📈 歷史走勢", "🔍 單場下鑽", "🌟 球星導覽"]
+     "📋 分組形勢", "📊 模型 vs 市場", "📈 歷史走勢", "🔍 單場下鑽", "🌟 球星導覽",
+     "🥇 射手榜"]
 )
 
 # ---------------- 賽事預測 ----------------
@@ -946,3 +953,48 @@ with tab_stars:
                     )
                     st.markdown(note)
                     st.markdown("")
+
+# ---------------- 射手榜 ----------------
+with tab_scorers:
+    st.subheader("🥇 個人射手榜（金靴戰況）")
+    st.caption(
+        "ESPN 逐場進球紀錄即時累計（含 12 碼 PK，排除烏龍球）。martj42 只有比分、"
+        "沒有進球者，故個人榜另接 ESPN——非官方 API，壞了這頁會空、不影響其他分頁。"
+    )
+    sc = get_scorers()
+    if sc.empty:
+        st.info("目前抓不到射手資料（賽事未開始或 ESPN 暫時無回應）。")
+    else:
+        # 標準並列名次（5,4,4,4 → 1,2,2,2,5...）
+        sc = sc.copy()
+        sc["名次"] = sc["goals"].rank(method="min", ascending=False).astype(int)
+
+        top = sc.iloc[0]
+        leaders = sc[sc["goals"] == top["goals"]]
+        names = "、".join(f"{p}（{zh(t)}）"
+                          for p, t in zip(leaders["player"], leaders["team"]))
+        st.success(f"🏆 目前金靴領先：**{names}** — {int(top['goals'])} 球")
+
+        show = pd.DataFrame({
+            "名次": sc["名次"],
+            "旗": sc["team"].map(flag_url),
+            "球員": sc["player"],
+            "隊伍": sc["team"].map(zh),
+            "進球": sc["goals"],
+            "其中 PK": sc["penalties"],
+        })
+        st.dataframe(
+            show,
+            hide_index=True, width="stretch", height=600,
+            column_config={
+                "旗": st.column_config.ImageColumn("", width=36),
+                "進球": st.column_config.ProgressColumn(
+                    "進球", format="%d",
+                    min_value=0, max_value=int(sc["goals"].max()),
+                ),
+            },
+        )
+        st.caption(
+            f"共 {len(sc)} 位球員進球，總計 {int(sc['goals'].sum())} 顆"
+            f"（其中 PK {int(sc['penalties'].sum())} 顆）。"
+        )
