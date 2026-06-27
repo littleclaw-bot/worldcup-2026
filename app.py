@@ -971,14 +971,17 @@ with tab_scorers:
 
         top = sc.iloc[0]
         leaders = sc[sc["goals"] == top["goals"]]
-        names = "、".join(f"{p}（{zh(t)}）"
-                          for p, t in zip(leaders["player"], leaders["team"]))
+        names = "、".join(
+            f"{scorersmod.player_zh(p)}（{zh(t)}）"
+            for p, t in zip(leaders["player"], leaders["team"])
+        )
         st.success(f"🏆 目前金靴領先：**{names}** — {int(top['goals'])} 球")
 
         show = pd.DataFrame({
             "名次": sc["名次"],
             "旗": sc["team"].map(flag_url),
-            "球員": sc["player"],
+            "球員": sc["player"].map(scorersmod.player_zh),
+            "原文": sc["player"],
             "隊伍": sc["team"].map(zh),
             "進球": sc["goals"],
             "其中 PK": sc["penalties"],
