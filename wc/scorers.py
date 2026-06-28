@@ -29,6 +29,7 @@ SEASON_START = "2026-06-11"  # 2026 世足開幕
 # ESPN 進球文字裡的隊名 → 我們/martj42 的隊名（只有這 7 個不一致）
 NAME_MAP = {
     "Cabo Verde": "Cape Verde",
+    "Congo DR": "DR Congo",
     "Czechia": "Czech Republic",
     "Côte d'Ivoire": "Ivory Coast",
     "IR Iran": "Iran",
@@ -149,6 +150,41 @@ PLAYER_ZH = {
     "Wilson Isidor": "伊西多",
     "Álex Baena": "巴埃納",
     "Álvaro Fidalgo": "菲達爾戈",
+    "Harry Kane": "凱恩",
+    "Abbosbek Fayzullaev": "法伊祖拉耶夫",
+    "Alex Freeman": "弗里曼",
+    "Aymen Hussein": "侯賽因",
+    "Breel Embolo": "恩博洛",
+    "Derrick Luckassen": "盧卡森",
+    "Désiré Doué": "杜埃",
+    "Eldor Shomurodov": "紹穆羅多夫",
+    "Finn Surman": "蘇爾曼",
+    "Granit Xhaka": "扎卡",
+    "Hazem Mastouri": "馬斯圖里",
+    "Jaminton Campaz": "坎帕斯",
+    "Jan Paul van Hecke": "範赫克",
+    "Jovo Lukic": "盧基奇",
+    "João Neves": "內維斯",
+    "Kevin Pina": "皮納",
+    "Ladislav Krejcí": "克雷伊奇",
+    "Leo Østigård": "厄斯蒂高",
+    "Mahmoud Saber": "薩貝爾",
+    "Marko Arnautovic": "阿瑙托維奇",
+    "Mohammad Mohebbi": "莫赫比",
+    "Mostafa Zico": "齊科",
+    "Nadhir Benbouali": "本布阿利",
+    "Nathan Saliba": "薩利巴",
+    "Nathaniel Brown": "布朗",
+    "Nico Schlotterbeck": "施洛特貝克",
+    "Nikola Vlasic": "弗拉西奇",
+    "Nuno Mendes": "努諾·門德斯",
+    "Omar Rekik": "雷基克",
+    "Raúl Jiménez": "希門尼斯",
+    "Romelu Lukaku": "盧卡庫",
+    "Teboho Mokoena": "莫科埃納",
+    "Trezeguet": "特雷澤蓋",
+    "Virgil van Dijk": "范戴克",
+    "Yoane Wissa": "維薩",
 }
 
 
@@ -203,9 +239,12 @@ def fetch_wc_scorers() -> pd.DataFrame:
             continue
         for e in summ.get("keyEvents", []):
             try:
-                if (e.get("type") or {}).get("text") != "Goal":
-                    continue
+                # ESPN 把進球拆成多種 type（Goal / Goal - Header /
+                # Penalty - Scored / 自由球…），但進球播報文字一律以
+                # "Goal!" 開頭——用它判定才不會漏頭槌、點球等。
                 txt = e.get("text", "")
+                if not txt.startswith("Goal!"):
+                    continue
                 if "own goal" in txt.lower():  # 烏龍球不算進球者
                     continue
                 m = _GOAL_RE.search(txt)
