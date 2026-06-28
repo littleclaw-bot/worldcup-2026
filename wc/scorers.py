@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import re
+import unicodedata
 from urllib.request import urlopen
 
 import pandas as pd
@@ -45,6 +46,13 @@ _GOAL_RE = re.compile(r"\.\s+([^().]+?)\s+\(([^)]+)\)")
 
 def _norm(team: str) -> str:
     return NAME_MAP.get(team, team)
+
+
+def _fold(s: str) -> str:
+    """去重音 + 小寫，用來容錯比對球員/隊名（'Østigård'→'ostigard'）."""
+    return "".join(
+        c for c in unicodedata.normalize("NFKD", s) if not unicodedata.combining(c)
+    ).lower().strip()
 
 
 # 球員中文譯名：日韓用實際漢字，其餘採台灣慣用譯名（找不到的就回原文英文）。
@@ -210,12 +218,13 @@ def _event_ids(days: list[str]) -> list[str]:
 
 
 def fetch_wc_scorers() -> pd.DataFrame:
-    """回 DataFrame[player, team, goals, penalties]，依進球數遞減.
+    """回 DataFrame[player, team, goals, penalties, jersey]，依進球數遞減.
 
     掃開幕日到今天（UTC）的所有場次。失敗或無資料回空 DataFrame
-    （欄位齊全，上層可安全 .empty 判斷）。
+    （欄位齊全，上層可安全 .empty 判斷）。背號取自同一份 summary 的
+    rosters（不另發請求），對不到名字就留空字串。
     """
-    cols = ["player", "team", "goals", "penalties"]
+    cols = ["player", "team", "goals", "penalties", "jersey"]
     try:
         now = pd.Timestamp.utcnow()
         start = pd.Timestamp(SEASON_START, tz="UTC")
@@ -230,6 +239,10 @@ def fetch_wc_scorers() -> pd.DataFrame:
     goals: dict[str, int] = {}
     pens: dict[str, int] = {}
     team_of: dict[str, str] = {}
+    # 背號：主索引以 (隊伍, 球員名) 去重音為 key，避免不同隊同名球員撞號；
+    # 後備索引只用球員名（解隊名格式不一致，如 Bosnia 的對戰文字 vs roster）。
+    jersey_team: dict[tuple[str, str], str] = {}
+    jersey_name: dict[str, str] = {}
 
     for eid in _event_ids(days):
         try:
@@ -237,6 +250,17 @@ def fetch_wc_scorers() -> pd.DataFrame:
             summ = json.loads(raw)
         except Exception:
             continue
+        for r in summ.get("rosters", []):
+            try:
+                team = _norm((r.get("team") or {}).get("displayName", ""))
+                for p in r.get("roster", []):
+                    name = (p.get("athlete") or {}).get("displayName")
+                    num = p.get("jersey")
+                    if name and num:
+                        jersey_team[(_fold(team), _fold(name))] = str(num)
+                        jersey_name[_fold(name)] = str(num)
+            except (KeyError, AttributeError, TypeError):
+                continue
         for e in summ.get("keyEvents", []):
             try:
                 # ESPN 把進球拆成多種 type（Goal / Goal - Header /
@@ -269,6 +293,9 @@ def fetch_wc_scorers() -> pd.DataFrame:
                 "team": team_of[p],
                 "goals": g,
                 "penalties": pens.get(p, 0),
+                "jersey": jersey_team.get(
+                    (_fold(team_of[p]), _fold(p)), jersey_name.get(_fold(p), "")
+                ),
             }
             for p, g in goals.items()
         ]

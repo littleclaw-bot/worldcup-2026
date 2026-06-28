@@ -1082,6 +1082,7 @@ with tab_scorers:
         show = pd.DataFrame({
             "名次": sc["名次"],
             "旗": sc["team"].map(flag_url),
+            "背號": sc["jersey"] if "jersey" in sc else "",
             "球員": sc["player"].map(scorersmod.player_zh),
             "原文": sc["player"],
             "隊伍": sc["team"].map(zh),
