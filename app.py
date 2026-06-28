@@ -959,39 +959,46 @@ with tab_history:
 
 # ---------------- 單場下鑽 ----------------
 with tab_drill:
-    opts = [
-        f"{r.date.date()} [{r.group}] {zh(r.home_team)} vs {zh(r.away_team)}"
-        for r in pending.itertuples()
-    ]
-    sel = st.selectbox("選一場", opts)
-    r = list(pending.itertuples())[opts.index(sel)]
-    grid = model.score_grid(r.home_team, r.away_team, not r.neutral)
-    p = model.outcome_probs(r.home_team, r.away_team, not r.neutral)
-    lam_h, lam_a = model.lambdas(r.home_team, r.away_team, not r.neutral)
+    rows = list(pending.itertuples())
+    if not rows:
+        st.info(
+            "小組賽已全部踢完，目前沒有未來的小組賽可下鑽。"
+            "淘汰賽對戰與機率請見「🗺️ 對戰樹」「🏆 冠軍機率」分頁。"
+        )
+    else:
+        opts = [
+            f"{r.date.date()} [{r.group}] {zh(r.home_team)} vs {zh(r.away_team)}"
+            for r in rows
+        ]
+        sel = st.selectbox("選一場", opts)
+        r = rows[opts.index(sel)]
+        grid = model.score_grid(r.home_team, r.away_team, not r.neutral)
+        p = model.outcome_probs(r.home_team, r.away_team, not r.neutral)
+        lam_h, lam_a = model.lambdas(r.home_team, r.away_team, not r.neutral)
 
-    c1, c2, c3, c4, c5 = st.columns(5)
-    c1.metric(f"{zh(r.home_team)} 勝", f"{p['home']:.0%}")
-    c2.metric("和局", f"{p['draw']:.0%}")
-    c3.metric(f"{zh(r.away_team)} 勝", f"{p['away']:.0%}")
-    c4.metric("預期進球（主）", f"{lam_h:.2f}")
-    c5.metric("預期進球（客）", f"{lam_a:.2f}")
+        c1, c2, c3, c4, c5 = st.columns(5)
+        c1.metric(f"{zh(r.home_team)} 勝", f"{p['home']:.0%}")
+        c2.metric("和局", f"{p['draw']:.0%}")
+        c3.metric(f"{zh(r.away_team)} 勝", f"{p['away']:.0%}")
+        c4.metric("預期進球（主）", f"{lam_h:.2f}")
+        c5.metric("預期進球（客）", f"{lam_a:.2f}")
 
-    k = 6
-    fig = px.imshow(
-        grid[:k, :k] * 100,
-        x=[str(i) for i in range(k)], y=[str(i) for i in range(k)],
-        color_continuous_scale="Blues", text_auto=".1f", aspect="auto",
-        labels=dict(x=f"{zh(r.away_team)} 進球", y=f"{zh(r.home_team)} 進球",
-                    color="機率 %"),
-    )
-    fig.update_layout(height=420, margin=dict(l=0, r=0, t=10, b=0))
-    st.plotly_chart(fig, width="stretch")
+        k = 6
+        fig = px.imshow(
+            grid[:k, :k] * 100,
+            x=[str(i) for i in range(k)], y=[str(i) for i in range(k)],
+            color_continuous_scale="Blues", text_auto=".1f", aspect="auto",
+            labels=dict(x=f"{zh(r.away_team)} 進球", y=f"{zh(r.home_team)} 進球",
+                        color="機率 %"),
+        )
+        fig.update_layout(height=420, margin=dict(l=0, r=0, t=10, b=0))
+        st.plotly_chart(fig, width="stretch")
 
-    flat = [(i, j, grid[i, j]) for i in range(k) for j in range(k)]
-    flat.sort(key=lambda x: x[2], reverse=True)
-    st.caption("最可能比分：" + "、".join(
-        f"{i}-{j}（{v:.1%}）" for i, j, v in flat[:5]
-    ))
+        flat = [(i, j, grid[i, j]) for i in range(k) for j in range(k)]
+        flat.sort(key=lambda x: x[2], reverse=True)
+        st.caption("最可能比分：" + "、".join(
+            f"{i}-{j}（{v:.1%}）" for i, j, v in flat[:5]
+        ))
 
 # ---------------- 球星導覽 ----------------
 with tab_stars:

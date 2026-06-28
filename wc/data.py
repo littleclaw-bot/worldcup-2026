@@ -187,12 +187,21 @@ def training_matches(
 
 
 def wc_fixtures(df: pd.DataFrame) -> pd.DataFrame:
-    """The 72 group-stage rows of WC2026, with group labels."""
+    """The 72 group-stage rows of WC2026, with group labels.
+
+    Keeps only intra-group matches. Once the tournament reaches knockout,
+    results.csv gains cross-group rows (also tournament=="FIFA World Cup");
+    those are excluded here — the simulation re-derives the bracket itself,
+    and feeding a cross-group game into per-group standings would KeyError.
+    """
     f = df[(df["tournament"] == "FIFA World Cup") & (df["date"] >= "2026-06-01")].copy()
     f["group"] = f["home_team"].map(TEAM_TO_GROUP)
-    missing = f[f["group"].isna()]
+    f["away_group"] = f["away_team"].map(TEAM_TO_GROUP)
+    missing = f[f["group"].isna() | f["away_group"].isna()]
     if len(missing):
-        raise ValueError(f"unmapped WC team names: {missing['home_team'].unique()}")
+        unmapped = set(missing["home_team"]) | set(missing["away_team"])
+        raise ValueError(f"unmapped WC team names: {sorted(unmapped - set(TEAM_TO_GROUP))}")
+    f = f[f["group"] == f["away_group"]].drop(columns="away_group")
     if sorted(set(f["home_team"]) | set(f["away_team"])) != ALL_TEAMS:
         raise ValueError("fixture teams do not match GROUPS table")
     return f.sort_values("date").reset_index(drop=True)
