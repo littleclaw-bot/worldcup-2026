@@ -20,6 +20,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from wc import (
     data, model as dcmodel, odds as oddsmod, simulate, elo as elomod,
     bracket as bracketmod, live as livemod, scorers as scorersmod,
+    knockout as komod,
 )
 from wc.teamguide import TEAM_GUIDE, STORYLINES, MARKET_VALUE, BIRTH
 
@@ -252,6 +253,12 @@ def get_scorers() -> pd.DataFrame:
     return scorersmod.fetch_wc_scorers()
 
 
+@st.cache_data(ttl=300, show_spinner="抓淘汰賽賽程 (ESPN) ...")
+def get_knockout() -> pd.DataFrame:
+    """ESPN 淘汰賽真實對戰+比分（cache 5 分鐘）。失敗回空 DataFrame."""
+    return komod.fetch_knockout_fixtures()
+
+
 # ---------------- sidebar ----------------
 st.sidebar.title("⚽ WC2026 預測")
 
@@ -446,6 +453,16 @@ def slot_zh(s: str) -> str:
     return f"{s[1]}組第{s[0]}名"
 
 
+def ko_placeholder_zh(s: str) -> str:
+    """把 ESPN 尚未底定的對戰佔位字串中文化（如 'Group J 2nd Place'→'J 組第2'）."""
+    s = re.sub(r"Group ([A-Z]) (\d)\w\w Place", r"\1 組第\2", s)
+    s = re.sub(r"Third Place Group ([A-Z/]+)", r"最佳第三（\1 組）", s)
+    s = (s.replace("Round of 32", "R32").replace("Round of 16", "R16")
+          .replace("Quarterfinal", "8強").replace("Semifinal", "4強")
+          .replace(" Winner", " 勝者"))
+    return s
+
+
 WEEK_ZH = "一二三四五六日"
 
 
@@ -492,14 +509,41 @@ with tab_sched:
             "_pending": pd.isna(r.home_score),
             "_sort": tw if tw is not None else pd.Timestamp(r.date),
         })
+    # ESPN 真實淘汰賽對戰 + 比分，用開球時間（台灣，naive）對應我們的場次
+    ko_espn = get_knockout()
+    ko_by_time = {}
+    if not ko_espn.empty:
+        for er in ko_espn.itertuples():
+            ko_by_time[er.kickoff_tw.tz_localize(None)] = er
+
+    def _ko_side(name, slot):
+        """ESPN 隊名→(旗, 顯示名, 真實隊名 or None)；佔位則中文化、無旗."""
+        if name in data.TEAM_TO_GROUP:
+            return flag_url(name), tname(name), name
+        return None, ko_placeholder_zh(name), None
+
     for no, md, hs, as_, city, rnd in KO_SCHEDULE:
         tw = ko_times.get(no)
+        esp = ko_by_time.get(tw) if tw is not None else None
+        if esp is not None:
+            h_flag, h_disp, h_team = _ko_side(esp.home, hs)
+            a_flag, a_disp, a_team = _ko_side(esp.away, as_)
+            score = (
+                f"{int(esp.home_score)} : {int(esp.away_score)}"
+                if esp.home_score is not None else "—"
+            )
+            teams = {t for t in (h_team, a_team) if t}
+            ko_pending = esp.home_score is None
+        else:
+            h_flag, h_disp = None, slot_zh(hs)
+            a_flag, a_disp = None, slot_zh(as_)
+            score, teams, ko_pending = "—", set(), True
         rows.append({
             "當地日期": f"2026-{md}", "台灣時間": _tw_fmt(tw),
             "輪次": f"{rnd}（{no}）",
-            "主旗": None, "主隊": slot_zh(hs), "比分": "—",
-            "客旗": None, "客隊": slot_zh(as_),
-            "城市": city, "_teams": set(), "_group": None, "_pending": True,
+            "主旗": h_flag, "主隊": h_disp, "比分": score,
+            "客旗": a_flag, "客隊": a_disp,
+            "城市": city, "_teams": teams, "_group": None, "_pending": ko_pending,
             "_sort": tw if tw is not None else pd.Timestamp(f"2026-{md}"),
         })
 
@@ -514,7 +558,7 @@ with tab_sched:
     today_md = f"{pd.Timestamp.now():%m-%d}"
     st.caption(
         f"共 {len(sched)} 場（台灣今天 {today_md}）。"
-        "台灣時間=開球時刻；淘汰賽對戰隊伍待小組賽底定。"
+        "台灣時間=開球時刻；淘汰賽對戰與比分接 ESPN（未底定者顯示晉級條件）。"
     )
 
     def _hl_today(row):
