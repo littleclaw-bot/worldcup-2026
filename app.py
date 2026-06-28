@@ -377,6 +377,57 @@ with tab_match:
                     key=f"bar{r.Index}", config={"displayModeBar": False},
                 )
 
+    # 即將開打的淘汰賽（ESPN 已底定對戰）——淘汰賽無和局，用「晉級機率」
+    ko_pred = get_knockout()
+    if not ko_pred.empty:
+        today = pd.Timestamp.now().normalize()
+        upcoming_ko = [
+            r for r in ko_pred.itertuples()
+            if r.home_score is None
+            and r.home in data.TEAM_TO_GROUP and r.away in data.TEAM_TO_GROUP
+            and today <= r.kickoff_tw.tz_localize(None) <= today + pd.Timedelta(days=days)
+        ]
+        if upcoming_ko:
+            st.divider()
+            st.subheader("🏆 即將開打的淘汰賽（晉級機率）")
+            for r in upcoming_ko:
+                home, away, vc = r.home, r.away, r.venue_country
+                if away == vc and home != vc:  # 客隊才是主辦國主場 → 換邊算
+                    p_home = 1.0 - bracketmod.ko_win_prob(model, away, home, True)
+                else:
+                    p_home = bracketmod.ko_win_prob(model, home, away, home == vc)
+                host = "🏟️" if vc in (home, away) else ""
+                c1, c2 = st.columns([2.2, 3])
+                with c1:
+                    st.markdown(
+                        f"**[{r.round_zh}] {tname(home)} vs {tname(away)}** {host}"
+                    )
+                    st.caption(
+                        f"{r.kickoff_tw:%m-%d %H:%M}（台）　模型晉級："
+                        f"{zh(home)} {p_home:.0%} / {zh(away)} {1 - p_home:.0%}"
+                    )
+                with c2:
+                    fig = go.Figure()
+                    for name, val, color in [
+                        (zh(home), p_home, "#2563eb"),
+                        (zh(away), 1 - p_home, "#dc2626"),
+                    ]:
+                        fig.add_trace(go.Bar(
+                            x=[val], y=[""], name=name, orientation="h",
+                            marker_color=color, text=f"{name} {val:.0%}",
+                            textposition="inside",
+                        ))
+                    fig.update_layout(
+                        barmode="stack", height=60, showlegend=False,
+                        margin=dict(l=0, r=0, t=0, b=0),
+                        xaxis=dict(visible=False, range=[0, 1]),
+                        yaxis=dict(visible=False),
+                    )
+                    st.plotly_chart(
+                        fig, width="stretch",
+                        key=f"kobar{r.Index}", config={"displayModeBar": False},
+                    )
+
     if len(played):
         st.divider()
         st.subheader("✅ 已賽結果 vs 模型賽前機率")

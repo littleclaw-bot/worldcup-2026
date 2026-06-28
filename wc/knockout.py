@@ -29,6 +29,9 @@ ROUND_INFO = {
 KO_START = "2026-06-28"  # R32 開打日
 KO_END = "2026-07-20"    # 決賽（7/19）後一天，含時差緩衝
 
+# ESPN 球場所在國 → 我們的隊名（判主辦國主場優勢用，只有這三個主辦國）
+HOST_COUNTRY = {"USA": "United States", "Mexico": "Mexico", "Canada": "Canada"}
+
 
 def fetch_knockout_fixtures() -> pd.DataFrame:
     """回 DataFrame，依開球時間排序.
@@ -39,7 +42,8 @@ def fetch_knockout_fixtures() -> pd.DataFrame:
     失敗或無賽事回空 DataFrame（欄位齊全）。
     """
     cols = ["round_slug", "round_order", "round_zh", "kickoff_tw",
-            "home", "away", "home_score", "away_score", "status", "venue"]
+            "home", "away", "home_score", "away_score", "status",
+            "venue", "venue_country"]
     rows: list[dict] = []
     try:
         days = pd.date_range(KO_START, KO_END, freq="D")
@@ -79,6 +83,9 @@ def fetch_knockout_fixtures() -> pd.DataFrame:
                     (None, "") else None,
                     "status": status,
                     "venue": ven.get("fullName", ""),
+                    "venue_country": HOST_COUNTRY.get(
+                        (ven.get("address", {}) or {}).get("country", ""), ""
+                    ),
                 })
             except (KeyError, IndexError, ValueError, TypeError):
                 continue
