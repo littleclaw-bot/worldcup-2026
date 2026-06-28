@@ -383,7 +383,7 @@ with tab_match:
         today = pd.Timestamp.now().normalize()
         upcoming_ko = [
             r for r in ko_pred.itertuples()
-            if r.home_score is None
+            if pd.isna(r.home_score)
             and r.home in data.TEAM_TO_GROUP and r.away in data.TEAM_TO_GROUP
             and today <= r.kickoff_tw.tz_localize(None) <= today + pd.Timedelta(days=days)
         ]
@@ -581,10 +581,10 @@ with tab_sched:
             a_flag, a_disp, a_team = _ko_side(esp.away, as_)
             score = (
                 f"{int(esp.home_score)} : {int(esp.away_score)}"
-                if esp.home_score is not None else "—"
+                if pd.notna(esp.home_score) else "—"
             )
             teams = {t for t in (h_team, a_team) if t}
-            ko_pending = esp.home_score is None
+            ko_pending = pd.isna(esp.home_score)
         else:
             h_flag, h_disp = None, slot_zh(hs)
             a_flag, a_disp = None, slot_zh(as_)
