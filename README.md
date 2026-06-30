@@ -22,7 +22,7 @@ wc/
   elo.py           # World Football Elo（1872 全史自算）
   odds.py          # implied prob、edge 偵測、Brier/log loss 計分
   live.py          # ESPN 即時比分 overlay（補 martj42 delay）
-  teamguide.py     # 球星導覽資料（10 隊 48 人：背號/球隊/年薪/身價/年齡）
+  teamguide.py     # 球星導覽資料（11 隊：背號/球隊/年薪/身價/年齡）
 app.py             # Streamlit 儀表板（10 分頁）
 run_predict.py     # daily driver（含每日快照）
 snapshot_history.py# 歷史快照（可 --backfill 以「某日視角」回算）

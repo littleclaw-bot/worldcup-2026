@@ -1005,7 +1005,7 @@ with tab_drill:
 
 # ---------------- 球星導覽 ----------------
 with tab_stars:
-    st.caption("10 支重點球隊的核心球員（含背號、現役球隊、年薪、身價）。"
+    st.caption("11 支重點球隊的核心球員（含背號、現役球隊、年薪、身價）。"
                "💰年薪=俱樂部稅前固定年薪估計;📈身價=Transfermarkt 市值概值"
                "（看「現在值多少」最準,隨表現/轉會窗大幅變動）。標「約」者為概估,"
                f"台幣以 €1≈NT${EUR_TWD} 概算。💖 = 球迷/媒體公認人氣顏值。")
@@ -1014,7 +1014,7 @@ with tab_stars:
     st.divider()
 
     champ = get_sim(mt, n_sims, live_key).set_index("team")["champion"].to_dict()
-    tiers = ["冠軍熱門", "歐洲傳統強權", "亞洲雙雄"]
+    tiers = ["冠軍熱門", "歐洲傳統強權", "亞洲雙雄", "球星黑馬"]
     for tier in tiers:
         st.subheader(tier)
         teams = [t for t, g in TEAM_GUIDE.items() if g["tier"] == tier]
