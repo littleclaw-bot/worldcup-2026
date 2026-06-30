@@ -583,6 +583,9 @@ with tab_sched:
                 f"{int(esp.home_score)} : {int(esp.away_score)}"
                 if pd.notna(esp.home_score) else "—"
             )
+            # 踢到 PK 的淘汰賽：正規賽平手，補上 PK 比分標明晉級者
+            if pd.notna(getattr(esp, "home_pen", None)):
+                score += f"（PK {int(esp.home_pen)}:{int(esp.away_pen)}）"
             teams = {t for t in (h_team, a_team) if t}
             ko_pending = pd.isna(esp.home_score)
         else:

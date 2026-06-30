@@ -42,7 +42,8 @@ def fetch_knockout_fixtures() -> pd.DataFrame:
     失敗或無賽事回空 DataFrame（欄位齊全）。
     """
     cols = ["round_slug", "round_order", "round_zh", "kickoff_tw",
-            "home", "away", "home_score", "away_score", "status",
+            "home", "away", "home_score", "away_score",
+            "home_pen", "away_pen", "status",
             "venue", "venue_country"]
     rows: list[dict] = []
     try:
@@ -64,8 +65,11 @@ def fetch_knockout_fixtures() -> pd.DataFrame:
                 comp = e["competitions"][0]
                 sides = {x["homeAway"]: x for x in comp["competitors"]}
                 h, a = sides["home"], sides["away"]
-                status = comp.get("status", {}).get("type", {}).get("name", "")
-                ft = status == "STATUS_FULL_TIME"
+                stype = comp.get("status", {}).get("type", {})
+                status = stype.get("name", "")
+                # completed＝已完賽總旗標（FT/延長賽/PK 都 True），比對單一字串
+                # 會漏掉 STATUS_FINAL_AET/STATUS_FINAL_PEN 那些淘汰賽收尾狀態。
+                done = bool(stype.get("completed"))
                 ven = comp.get("venue", {}) or {}
                 order, zh = ROUND_INFO[slug]
                 rows.append({
@@ -77,10 +81,16 @@ def fetch_knockout_fixtures() -> pd.DataFrame:
                     ),
                     "home": _norm(h["team"]["displayName"]),
                     "away": _norm(a["team"]["displayName"]),
-                    "home_score": int(h["score"]) if ft and h.get("score") not in
+                    "home_score": int(h["score"]) if done and h.get("score") not in
                     (None, "") else None,
-                    "away_score": int(a["score"]) if ft and a.get("score") not in
+                    "away_score": int(a["score"]) if done and a.get("score") not in
                     (None, "") else None,
+                    # PK 比分（只有踢到 PK 才有，其餘為 None）：score 欄是
+                    # 正規/延長賽後比分（PK 不算進去），晉級者看 shootoutScore。
+                    "home_pen": int(h["shootoutScore"]) if done and
+                    h.get("shootoutScore") not in (None, "") else None,
+                    "away_pen": int(a["shootoutScore"]) if done and
+                    a.get("shootoutScore") not in (None, "") else None,
                     "status": status,
                     "venue": ven.get("fullName", ""),
                     "venue_country": HOST_COUNTRY.get(

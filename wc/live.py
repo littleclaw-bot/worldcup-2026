@@ -48,9 +48,12 @@ def fetch_wc_live_results(days_back: int = 3) -> dict[tuple[str, str], tuple[int
         for e in data.get("events", []):
             try:
                 comp = e["competitions"][0]
-                if comp.get("status", e.get("status", {})).get(
+                # 用 type.completed（已完賽總旗標）而非比對 STATUS_FULL_TIME——
+                # 淘汰賽延長賽/PK 收尾的狀態是 STATUS_FINAL_AET/STATUS_FINAL_PEN，
+                # 比對單一字串會把它們漏掉，completed 一律涵蓋且未來不會再漏。
+                if not comp.get("status", e.get("status", {})).get(
                     "type", {}
-                ).get("name") != "STATUS_FULL_TIME":
+                ).get("completed"):
                     continue
                 sides = {x["homeAway"]: x for x in comp["competitors"]}
                 h, a = sides["home"], sides["away"]
