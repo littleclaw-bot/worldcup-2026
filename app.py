@@ -560,12 +560,26 @@ with tab_sched:
             "_pending": pd.isna(r.home_score),
             "_sort": tw if tw is not None else pd.Timestamp(r.date),
         })
-    # ESPN 真實淘汰賽對戰 + 比分，用開球時間（台灣，naive）對應我們的場次
+    # ESPN 真實淘汰賽對戰 + 比分，用開球時間（台灣，naive）對應我們的場次。
+    # ESPN 有時會微調開球時刻（如把某場延後 1 小時），改用容差就近配對而非
+    # 精確時刻相等——不然被挪動的場次會配不上、退回顯示「A組第1名」佔位字串。
+    # 相鄰淘汰賽至少差 3 小時以上，2 小時容差不會誤配到別場。
     ko_espn = get_knockout()
-    ko_by_time = {}
-    if not ko_espn.empty:
-        for er in ko_espn.itertuples():
-            ko_by_time[er.kickoff_tw.tz_localize(None)] = er
+    ko_events = (
+        [(er.kickoff_tw.tz_localize(None), er) for er in ko_espn.itertuples()]
+        if not ko_espn.empty else []
+    )
+    KO_MATCH_TOL = pd.Timedelta(hours=2)
+
+    def _match_espn(tw):
+        if tw is None:
+            return None
+        best, best_gap = None, KO_MATCH_TOL
+        for et, er in ko_events:
+            gap = abs(et - tw)
+            if gap <= best_gap:
+                best, best_gap = er, gap
+        return best
 
     def _ko_side(name, slot):
         """ESPN 隊名→(旗, 顯示名, 真實隊名 or None)；佔位則中文化、無旗."""
@@ -575,7 +589,7 @@ with tab_sched:
 
     for no, md, hs, as_, city, rnd in KO_SCHEDULE:
         tw = ko_times.get(no)
-        esp = ko_by_time.get(tw) if tw is not None else None
+        esp = _match_espn(tw)
         if esp is not None:
             h_flag, h_disp, h_team = _ko_side(esp.home, hs)
             a_flag, a_disp, a_team = _ko_side(esp.away, as_)
