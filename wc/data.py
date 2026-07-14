@@ -193,8 +193,15 @@ def wc_fixtures(df: pd.DataFrame) -> pd.DataFrame:
     results.csv gains cross-group rows (also tournament=="FIFA World Cup");
     those are excluded here — the simulation re-derives the bracket itself,
     and feeding a cross-group game into per-group standings would KeyError.
+    Upstream also pre-inserts not-yet-decided fixtures (e.g. the final) with
+    blank team names; those NaN rows are dropped too.
     """
-    f = df[(df["tournament"] == "FIFA World Cup") & (df["date"] >= "2026-06-01")].copy()
+    f = df[
+        (df["tournament"] == "FIFA World Cup")
+        & (df["date"] >= "2026-06-01")
+        & df["home_team"].notna()
+        & df["away_team"].notna()
+    ].copy()
     f["group"] = f["home_team"].map(TEAM_TO_GROUP)
     f["away_group"] = f["away_team"].map(TEAM_TO_GROUP)
     missing = f[f["group"].isna() | f["away_group"].isna()]
