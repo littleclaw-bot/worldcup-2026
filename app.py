@@ -247,9 +247,9 @@ def get_bracket(mtimes: tuple, n_sims: int, live_key: tuple):
     return bracketmod.predicted_bracket(m, data.wc_fixtures(df), n_sims=n_sims)
 
 
-@st.cache_data(ttl=300, show_spinner="抓射手榜 (ESPN) ...")
+@st.cache_data(ttl=300, show_spinner="抓射手/助攻榜 (ESPN) ...")
 def get_scorers() -> pd.DataFrame:
-    """ESPN 逐場進球紀錄組出的個人射手榜（cache 5 分鐘）。失敗回空 DataFrame."""
+    """ESPN 逐場進球紀錄組出的個人進球＋助攻榜（cache 5 分鐘）。失敗回空 DataFrame."""
     return scorersmod.fetch_wc_scorers()
 
 
@@ -320,7 +320,7 @@ pending = fixtures[fixtures["home_score"].isna()]
  tab_history, tab_drill, tab_stars, tab_scorers) = st.tabs(
     ["📅 賽事預測", "🗓️ 賽程表", "🏆 冠軍機率", "🗺️ 對戰樹", "💪 Elo 實力榜",
      "📋 分組形勢", "📊 模型 vs 市場", "📈 歷史走勢", "🔍 單場下鑽", "🌟 球星導覽",
-     "🥇 射手榜"]
+     "🥇 射手/助攻榜"]
 )
 
 # ---------------- 賽事預測 ----------------
@@ -1073,51 +1073,96 @@ with tab_stars:
                     st.markdown(note)
                     st.markdown("")
 
-# ---------------- 射手榜 ----------------
+# ---------------- 射手 / 助攻榜 ----------------
 with tab_scorers:
-    st.subheader("🥇 個人射手榜（金靴戰況）")
+    st.subheader("🥇 個人榜（金靴 × 助攻王）")
     st.caption(
-        "ESPN 逐場進球紀錄即時累計（含 12 碼 PK，排除烏龍球）。martj42 只有比分、"
-        "沒有進球者，故個人榜另接 ESPN——非官方 API，壞了這頁會空、不影響其他分頁。"
+        "ESPN 逐場進球紀錄即時累計。進球含 12 碼 PK、排除烏龍球，PK 大戰不計；"
+        "助攻只認播報寫明 Assisted by 的那顆。martj42 只有比分、沒有進球者，故個人榜"
+        "另接 ESPN——非官方 API，壞了這頁會空、不影響其他分頁。"
     )
     sc = get_scorers()
     if sc.empty:
-        st.info("目前抓不到射手資料（賽事未開始或 ESPN 暫時無回應）。")
+        st.info("目前抓不到射手/助攻資料（賽事未開始或 ESPN 暫時無回應）。")
     else:
-        # 標準並列名次（5,4,4,4 → 1,2,2,2,5...）
         sc = sc.copy()
-        sc["名次"] = sc["goals"].rank(method="min", ascending=False).astype(int)
+        sc["ga"] = sc["goals"] + sc["assists"]
 
-        top = sc.iloc[0]
-        leaders = sc[sc["goals"] == top["goals"]]
-        names = "、".join(
-            f"{scorersmod.player_zh(p)}（{zh(t)}）"
-            for p, t in zip(leaders["player"], leaders["team"])
-        )
-        st.success(f"🏆 目前金靴領先：**{names}** — {int(top['goals'])} 球")
+        def board(metric: str, disp: str, unit: str, extras: list, lead: str, foot):
+            """畫一張榜：只留 metric > 0 的人，依 metric 遞減排。
 
-        show = pd.DataFrame({
-            "名次": sc["名次"],
-            "旗": sc["team"].map(flag_url),
-            "背號": sc["jersey"] if "jersey" in sc else "",
-            "球員": sc["player"].map(scorersmod.player_zh),
-            "原文": sc["player"],
-            "隊伍": sc["team"].map(zh),
-            "進球": sc["goals"],
-            "其中 PK": sc["penalties"],
-        })
-        st.dataframe(
-            show,
-            hide_index=True, width="stretch", height=600,
-            column_config={
-                "旗": st.column_config.ImageColumn("", width=36),
-                "進球": st.column_config.ProgressColumn(
-                    "進球", format="%d",
-                    min_value=0, max_value=int(sc["goals"].max()),
+            名次用標準並列制（5,4,4,4 → 1,2,2,2）。extras 是額外欄位
+            [(顯示名, 欄位名), ...]，foot 吃 df 回表尾說明。
+            """
+            d = sc[sc[metric] > 0].sort_values(
+                [metric, "player"], ascending=[False, True]
+            ).copy()
+            if d.empty:
+                st.info(f"目前還沒有{disp}紀錄。")
+                return
+            d["名次"] = d[metric].rank(method="min", ascending=False).astype(int)
+
+            best = int(d[metric].max())
+            leaders = d[d[metric] == best]
+            names = "、".join(
+                f"{scorersmod.player_zh(p)}（{zh(t)}）"
+                for p, t in zip(leaders["player"], leaders["team"])
+            )
+            st.success(f"{lead}：**{names}** — {best} {unit}")
+
+            show = pd.DataFrame({
+                "名次": d["名次"],
+                "旗": d["team"].map(flag_url),
+                "背號": d["jersey"],
+                "球員": d["player"].map(scorersmod.player_zh),
+                "原文": d["player"],
+                "隊伍": d["team"].map(zh),
+                disp: d[metric],
+                **{k: d[c] for k, c in extras},
+            })
+            st.dataframe(
+                show,
+                hide_index=True, width="stretch", height=600,
+                column_config={
+                    "旗": st.column_config.ImageColumn("", width=36),
+                    disp: st.column_config.ProgressColumn(
+                        disp, format="%d", min_value=0, max_value=best,
+                    ),
+                },
+            )
+            st.caption(foot(d))
+
+        b_goal, b_asst, b_ga = st.tabs(["🥇 射手榜", "🅰️ 助攻榜", "⚡ 攻擊貢獻 (G+A)"])
+
+        with b_goal:
+            board(
+                "goals", "進球", "球",
+                [("其中 PK", "penalties"), ("助攻", "assists")],
+                "🏆 目前金靴領先",
+                lambda d: (
+                    f"共 {len(d)} 位球員進球，總計 {int(d['goals'].sum())} 顆"
+                    f"（其中 PK {int(d['penalties'].sum())} 顆）。"
                 ),
-            },
-        )
-        st.caption(
-            f"共 {len(sc)} 位球員進球，總計 {int(sc['goals'].sum())} 顆"
-            f"（其中 PK {int(sc['penalties'].sum())} 顆）。"
-        )
+            )
+        with b_asst:
+            board(
+                "assists", "助攻", "次",
+                [("進球", "goals")],
+                "🎯 目前助攻王領先",
+                lambda d: (
+                    f"共 {len(d)} 位球員送出助攻，總計 {int(d['assists'].sum())} 次"
+                    f"——本屆 {int(sc['goals'].sum())} 顆進球中，"
+                    f"{int(d['assists'].sum()) / max(int(sc['goals'].sum()), 1):.0%} 有助攻。"
+                ),
+            )
+        with b_ga:
+            board(
+                "ga", "G+A", "分",
+                [("進球", "goals"), ("助攻", "assists")],
+                "⚡ 目前攻擊貢獻王",
+                lambda d: (
+                    f"共 {len(d)} 位球員有攻擊貢獻（進球或助攻），"
+                    f"總計 {int(d['ga'].sum())} 分。金靴獎只看進球，這張榜看的是"
+                    "「他在多少顆進球裡有份」。"
+                ),
+            )
